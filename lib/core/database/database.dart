@@ -1,0 +1,111 @@
+import 'dart:io';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+class AppDatabase extends GeneratedDatabase {
+  AppDatabase(QueryExecutor executor) : super(executor);
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Iterable<TableInfo> get allTables => const [];
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        // Tables are created in beforeOpen, not here
+      },
+      beforeOpen: (details) async {
+        await _createTables();
+      },
+    );
+  }
+
+  Future<void> _createTables() async {
+    await customStatement('PRAGMA journal_mode=WAL;');
+    await customStatement('PRAGMA foreign_keys=ON;');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        author TEXT,
+        cover_path TEXT,
+        source TEXT NOT NULL DEFAULT 'local',
+        source_url TEXT,
+        file_path TEXT,
+        progress REAL NOT NULL DEFAULT 0.0,
+        current_chapter_index INTEGER NOT NULL DEFAULT 0,
+        total_chapters INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS chapters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        "index" INTEGER NOT NULL,
+        read_at TEXT
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS snippets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        note TEXT,
+        source_title TEXT,
+        source_url TEXT,
+        color TEXT,
+        book_id INTEGER REFERENCES books(id) ON DELETE SET NULL,
+        chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS snippet_tags (
+        snippet_id INTEGER NOT NULL REFERENCES snippets(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (snippet_id, tag_id)
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS reading_stats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL UNIQUE,
+        reading_time_seconds INTEGER NOT NULL DEFAULT 0,
+        snippets_created INTEGER NOT NULL DEFAULT 0,
+        books_completed INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS web_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url_hash TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    ''');
+  }
+
+  static Future<AppDatabase> create() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dir.path, 'stashreader.db'));
+    final executor = NativeDatabase(file);
+    return AppDatabase(executor);
+  }
+}

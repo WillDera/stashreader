@@ -1,0 +1,87 @@
+import 'dart:io';
+import 'package:epubx/epubx.dart';
+import 'package:image/image.dart' as img;
+import '../models/book.dart';
+import '../models/chapter.dart';
+
+class EpubResult {
+  final Book book;
+  final List<Chapter> chapters;
+
+  EpubResult({required this.book, required this.chapters});
+}
+
+class EpubService {
+  Future<EpubResult?> parseEpub(String filePath, {int? bookId}) async {
+    try {
+      final file = File(filePath);
+      final bytes = await file.readAsBytes();
+      final epubBook = await EpubReader.readBook(bytes);
+
+      final title = epubBook.Title ?? 'Unknown Title';
+      String? author;
+      if (epubBook.AuthorList != null && epubBook.AuthorList!.isNotEmpty) {
+        author = epubBook.AuthorList!.first;
+      }
+
+      // Extract cover image
+      String? coverPath;
+      try {
+        final coverImage = epubBook.CoverImage;
+        if (coverImage != null) {
+          final coverDir = await Directory.systemTemp.createTemp('epub_cover');
+          final coverFile = File('${coverDir.path}/cover.png');
+          final pngBytes = img.encodePng(coverImage);
+          await coverFile.writeAsBytes(pngBytes);
+          coverPath = coverFile.path;
+        }
+      } catch (_) {
+        // cover extraction is best-effort
+      }
+
+      final bookIdFinal = bookId ?? 0;
+      final chapters = <Chapter>[];
+
+      if (epubBook.Chapters != null) {
+        _extractChapters(epubBook.Chapters!, bookIdFinal, chapters, 0);
+      }
+
+      // Sort by index
+      chapters.sort((a, b) => a.index.compareTo(b.index));
+
+      final book = Book(
+        id: bookIdFinal,
+        title: title,
+        author: author,
+        coverPath: coverPath,
+        source: 'local',
+        filePath: filePath,
+        totalChapters: chapters.length,
+      );
+
+      return EpubResult(book: book, chapters: chapters);
+    } catch (e) {
+      throw Exception('Failed to parse EPUB: $e');
+    }
+  }
+
+  int _extractChapters(
+      List<EpubChapter> epubChapters, int bookId, List<Chapter> output, int startIndex) {
+    int idx = startIndex;
+    for (final ec in epubChapters) {
+      final chTitle = ec.Title ?? 'Chapter ${idx + 1}';
+      output.add(Chapter(
+        id: 0,
+        bookId: bookId,
+        title: chTitle,
+        content: ec.HtmlContent ?? '',
+        index: idx++,
+      ));
+      // Process subchapters
+      if (ec.SubChapters != null && ec.SubChapters!.isNotEmpty) {
+        idx = _extractChapters(ec.SubChapters!, bookId, output, idx);
+      }
+    }
+    return idx;
+  }
+}
