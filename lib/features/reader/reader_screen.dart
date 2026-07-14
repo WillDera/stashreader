@@ -1,30 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../features/snippets/snippets_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
-import '../../widgets/reader_settings_panel.dart';
+import '../../theme/tokens/app_colors.dart';
+import '../../theme/tokens/app_motion.dart';
+import '../../theme/tokens/app_spacing.dart';
+import '../../theme/tokens/app_type.dart';
+import '../../widgets/chapter_sheet.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/highlight_color_picker.dart';
+import '../../widgets/reader_bottom_bar.dart';
+import '../../widgets/reader_settings_sheet.dart';
+import '../../widgets/reader_top_bar.dart';
+import '../../widgets/text_selection_toolbar.dart';
+import '../../widgets/toast.dart';
 import 'reader_provider.dart';
 
 class ReaderScreen extends StatefulWidget {
   final int bookId;
-
   const ReaderScreen({super.key, required this.bookId});
 
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends State<ReaderScreen> {
+class _ReaderScreenState extends State<ReaderScreen>
+    with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   ReaderProvider? _provider;
+
   String? _selectedText;
   bool _showUI = true;
+  bool _toolbarVisible = false;
+  bool _colorPickerVisible = false;
   double _lastScrollOffset = 0;
+  Offset _selectionOrigin = Offset.zero;
+
+  late final AnimationController _toolbarCtrl;
+  late final AnimationController _colorCtrl;
 
   @override
   void initState() {
     super.initState();
+    _toolbarCtrl = AnimationController(
+      vsync: this,
+      duration: AppMotion.sheet,
+    );
+    _colorCtrl = AnimationController(
+      vsync: this,
+      duration: AppMotion.base,
+    );
     Future.microtask(() => _loadAndRestore());
   }
 
@@ -57,6 +84,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void dispose() {
     _provider?.stopReadingTimer();
     _scrollController.dispose();
+    _toolbarCtrl.dispose();
+    _colorCtrl.dispose();
     super.dispose();
   }
 
@@ -65,13 +94,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final currentOffset = _scrollController.hasClients
           ? _scrollController.offset
           : _lastScrollOffset;
-      context.read<ReaderProvider>().updateScrollPosition(currentOffset);
-      final diff = currentOffset - _lastScrollOffset;
+      _provider?.updateScrollPosition(currentOffset);
 
-      if (diff > 20 && currentOffset > 50) {
-        if (_showUI) setState(() => _showUI = false);
+      // Hide UI chrome while scrolling down, show on scroll up.
+      final diff = currentOffset - _lastScrollOffset;
+      if (diff > 8 && currentOffset > 80) {
+        if (_showUI) {
+          setState(() => _showUI = false);
+          _hideToolbar();
+        }
         _lastScrollOffset = currentOffset;
-      } else if (diff < -5 || currentOffset <= 0) {
+      } else if (diff < -4 || currentOffset <= 0) {
         if (!_showUI) setState(() => _showUI = true);
         _lastScrollOffset = currentOffset;
       }
@@ -81,320 +114,377 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _handleTapUp(TapUpDetails details) {
     if (!mounted) return;
+    if (_toolbarVisible) {
+      _hideToolbar();
+      return;
+    }
     final RenderBox renderBox = context.findRenderObject()! as RenderBox;
     final localPos = renderBox.globalToLocal(details.globalPosition);
     final screenWidth = renderBox.size.width;
 
-    final provider = context.read<ReaderProvider>();
-    if (provider.chapters.length <= 1) return;
-
-    if (localPos.dx < screenWidth / 3) {
-      provider.goToPreviousChapter();
-      setState(() {
-        _lastScrollOffset = 0;
-        _showUI = true;
-      });
-    } else if (localPos.dx > 2 * screenWidth / 3) {
-      provider.goToNextChapter();
-      setState(() {
-        _lastScrollOffset = 0;
-        _showUI = true;
-      });
-    } else {
-      setState(() => _showUI = !_showUI);
+    final provider = _provider!;
+    if (provider.chapters.length > 1) {
+      if (localPos.dx < screenWidth / 3) {
+        provider.goToPreviousChapter();
+        setState(() {
+          _lastScrollOffset = 0;
+          _showUI = true;
+        });
+        return;
+      } else if (localPos.dx > 2 * screenWidth / 3) {
+        provider.goToNextChapter();
+        setState(() {
+          _lastScrollOffset = 0;
+          _showUI = true;
+        });
+        return;
+      }
     }
+    setState(() => _showUI = !_showUI);
+  }
+
+  void _showToolbar(Offset origin) {
+    setState(() {
+      _toolbarVisible = true;
+      _selectionOrigin = origin;
+    });
+    _toolbarCtrl.forward(from: 0);
+  }
+
+  void _hideToolbar() {
+    _toolbarCtrl.reverse();
+    setState(() {
+      _toolbarVisible = false;
+      _colorPickerVisible = false;
+    });
+  }
+
+  void _showColorPicker() {
+    setState(() => _colorPickerVisible = true);
+    _colorCtrl.forward(from: 0);
   }
 
   @override
   Widget build(BuildContext context) {
     final themeProv = context.watch<ThemeProvider>();
     return Consumer<ReaderProvider>(
-        builder: (context, provider, _) {
-          if (provider.loading) {
-            return Scaffold(
-              backgroundColor: themeProv.isSepia
-                  ? AppTheme.sepiaBackground
-                  : (themeProv.isDark ? AppTheme.darkBackground : AppTheme.lightBackground),
-              body: const Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (provider.error != null || provider.currentChapter == null) {
-            final bgColor = themeProv.isSepia
-                ? AppTheme.sepiaBackground
-                : (themeProv.isDark ? AppTheme.darkBackground : AppTheme.lightBackground);
-            return Scaffold(
-              backgroundColor: bgColor,
-              body: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline,
-                        size: 48, color: AppTheme.accent.withValues(alpha: 0.6)),
-                    const SizedBox(height: 16),
-                    Text(provider.error ?? 'Content not available'),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final book = provider.book!;
-          final chapter = provider.currentChapter!;
-          final bgColor = themeProv.isSepia
-              ? AppTheme.sepiaBackground
-              : (themeProv.isDark ? AppTheme.darkBackground : AppTheme.lightBackground);
-          final textColor = themeProv.isSepia
-              ? AppTheme.sepiaText
-              : (themeProv.isDark ? AppTheme.darkText : AppTheme.lightText);
-          final textSecondaryColor = themeProv.isSepia
-              ? AppTheme.sepiaTextSecondary
-              : (themeProv.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary);
-
+      builder: (context, provider, _) {
+        if (provider.loading) {
           return Scaffold(
-            backgroundColor: bgColor,
-            appBar: _showUI
-                ? AppBar(
-                    backgroundColor: Colors.transparent,
-                    leading: IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    title: Text(book.title,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 15, color: textSecondaryColor)),
-                    actions: [
-                      IconButton(
-                        icon: const Icon(Icons.text_fields),
-                        tooltip: 'Reader Settings',
-                        onPressed: () =>
-                            _showReaderSettings(context, themeProv),
-                      ),
-                    ],
-                  )
-                : null,
-            body: Column(
+            backgroundColor: themeProv.isSepia
+                ? AppColors.sepiaBg
+                : (themeProv.isDark ? AppColors.darkBg : AppColors.lightBg),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (provider.error != null || provider.currentChapter == null) {
+          return Scaffold(
+            backgroundColor: themeProv.isSepia
+                ? AppColors.sepiaBg
+                : (themeProv.isDark ? AppColors.darkBg : AppColors.lightBg),
+            body: EmptyState(
+              icon: Icons.error_outline,
+              title: 'Content not available',
+              subtitle: provider.error ?? 'This chapter could not be loaded.',
+              primaryActionLabel: 'Back to library',
+              onPrimaryAction: () => Navigator.pop(context),
+            ),
+          );
+        }
+
+        final book = provider.book!;
+        final chapter = provider.currentChapter!;
+        final progress = (provider.currentIndex + 1) / provider.chapters.length;
+        final readingTime = _estimateReadingTime(chapter.content);
+
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: themeProv.isDark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          child: Scaffold(
+            backgroundColor: themeProv.bgColor,
+            body: Stack(
               children: [
-                // Thin top progress bar — single 2px line, no container
-                if (provider.chapters.length > 1)
-                  _buildTopProgressBar(provider),
-                // Content area with tap zones
-                Expanded(
-                  child: GestureDetector(
-                    onTapUp: _handleTapUp,
+                GestureDetector(
+                  onTapUp: _handleTapUp,
+                  behavior: HitTestBehavior.opaque,
+                  child: NotificationListener<ScrollStartNotification>(
+                    onNotification: (notification) {
+                      // When the user starts scrolling while the selection
+                      // toolbar is visible, dismiss it and absorb the
+                      // scroll-start notification so ScrollNotificationObserver
+                      // never tries to query the now-stale text selection
+                      // (assertion: selection.isValid).
+                      if (_toolbarVisible) {
+                        _hideToolbar();
+                        return true;
+                      }
+                      return false;
+                    },
                     child: NotificationListener<ScrollUpdateNotification>(
                       onNotification: _onScrollNotification,
                       child: SingleChildScrollView(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Chapter title — slightly larger, more bottom margin
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
+                      controller: _scrollController,
+                      padding: EdgeInsets.fromLTRB(
+                        _horizontalPadding(themeProv.pageWidth),
+                        MediaQuery.of(context).padding.top + (_showUI ? 88 : 32),
+                        _horizontalPadding(themeProv.pageWidth),
+                        MediaQuery.of(context).padding.bottom + (_showUI ? 96 : 64),
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: themeProv.pageWidth,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Chapter title
+                              Text(
                                 chapter.title,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                  fontStyle: FontStyle.italic,
-                                  color: textSecondaryColor,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ),
-                            // Content text
-                            SelectableText.rich(
-                              TextSpan(
-                                text: _stripHtml(chapter.content),
-                                style: TextStyle(
+                                style: AppType.reading(
                                   fontSize: themeProv.fontSize,
-                                  height: themeProv.lineHeight,
-                                  fontFamily: _resolveFont(themeProv),
-                                  color: textColor,
-                                  letterSpacing: 0.2,
+                                  lineHeight: themeProv.lineHeight,
+                                  color: context.colors.textTertiary,
+                                ).copyWith(
+                                  fontStyle: FontStyle.italic,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.1,
                                 ),
                               ),
-                              onSelectionChanged: (selection, cause) {
-                                if (selection.isValid &&
-                                    !selection.isCollapsed) {
-                                  final content =
-                                      _stripHtml(chapter.content);
-                                  _selectedText = content.substring(
-                                      selection.start, selection.end);
-                                } else {
-                                  _selectedText = null;
-                                }
-                              },
-                              contextMenuBuilder:
-                                  (context, editableTextState) {
-                                final items =
-                                    List<ContextMenuButtonItem>.from(
-                                        editableTextState
-                                            .contextMenuButtonItems);
-                                if (_selectedText != null &&
-                                    _selectedText!
-                                        .trim()
-                                        .isNotEmpty) {
-                                  items.add(ContextMenuButtonItem(
-                                    onPressed: () {
-                                      _createSnippet(context,
-                                          _selectedText!, provider);
-                                    },
-                                    label: 'Create Snippet',
-                                  ));
-                                }
-                                return AdaptiveTextSelectionToolbar
-                                    .buttonItems(
-                                  buttonItems: items,
-                                  anchors: editableTextState
-                                      .contextMenuAnchors,
+                              const SizedBox(height: 28),
+                              SelectableText.rich(
+                                TextSpan(
+                                  text: _stripHtml(chapter.content),
+                                  style: _readingStyle(themeProv),
+                                ),
+                                textAlign: themeProv.textAlign,
+                                onSelectionChanged: (selection, cause) {
+                                  if (selection.isValid &&
+                                      !selection.isCollapsed) {
+                                    final content =
+                                        _stripHtml(chapter.content);
+                                    if (selection.end <= content.length) {
+                                      _selectedText = content.substring(
+                                          selection.start, selection.end);
+                                      _showToolbar(Offset.zero);
+                                    }
+                                  } else if (_toolbarVisible) {
+                                    // Delay to allow taps on toolbar items.
+                                    Future.delayed(
+                                      const Duration(milliseconds: 200),
+                                      () {
+                                        if (!mounted) return;
+                                        if (_toolbarVisible) _hideToolbar();
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 80),
+                            ],
+                          ),                        // Column
+                        ),                          // ConstrainedBox
+                      ),                            // Center
+                    ),                              // SingleChildScrollView
+                  ),                                // NotificationListener<ScrollUpdateNotification>
+                ),                                  // NotificationListener<ScrollStartNotification>
+              ),                                    // GestureDetector
+
+                // Top bar
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: ReaderTopBar(
+                    bookTitle: book.title,
+                    chapterTitle: chapter.title,
+                    progress: progress,
+                    visible: _showUI,
+                    onBack: () => Navigator.pop(context),
+                    onSettings: () =>
+                        ReaderSettingsSheet.show(context, themeProv),
+                  ),
+                ),
+
+                // Bottom bar
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: ReaderBottomBar(
+                    visible: _showUI && !_toolbarVisible,
+                    onChapters: () => _openChapters(context, provider),
+                    onPrevious: provider.goToPreviousChapter,
+                    onNext: provider.goToNextChapter,
+                    canGoNext:
+                        provider.currentIndex < provider.chapters.length - 1,
+                    canGoPrevious: provider.currentIndex > 0,
+                    currentIndex: provider.currentIndex,
+                    totalChapters: provider.chapters.length,
+                    readingTimeRemaining: readingTime,
+                  ),
+                ),
+
+                // Selection toolbar overlay
+                if (_toolbarVisible)
+                  FadeTransition(
+                    opacity: _toolbarCtrl,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.3),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(
+                          parent: _toolbarCtrl, curve: AppMotion.standard)),
+                      child: Stack(
+                        children: [
+                          ReaderSelectionToolbar(
+                            selectedText: _selectedText ?? '',
+                            defaultHighlightColor: themeProv.defaultHighlight,
+                            position: _selectionOrigin,
+                            onHighlight: (color) {
+                              _saveHighlight(color);
+                            },
+                            onNote: () {
+                              _createSnippetFromSelection();
+                            },
+                            onCopy: () {
+                              if (_selectedText != null) {
+                                Clipboard.setData(
+                                    ClipboardData(text: _selectedText!));
+                                StashToast.show(
+                                  context,
+                                  message: 'Copied to clipboard',
+                                  icon: Icons.check,
                                 );
-                              },
+                              }
+                              _hideToolbar();
+                            },
+                            onShare: () {
+                              if (_selectedText != null) {
+                                Clipboard.setData(
+                                    ClipboardData(text: _selectedText!));
+                                StashToast.show(
+                                  context,
+                                  message: 'Quote copied · share anywhere',
+                                  icon: Icons.ios_share,
+                                );
+                              }
+                              _hideToolbar();
+                            },
+                          ),
+                          if (_colorPickerVisible)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 180,
+                              child: Center(
+                                child: ScaleTransition(
+                                  scale: CurvedAnimation(
+                                    parent: _colorCtrl,
+                                    curve: AppMotion.standard,
+                                  ),
+                                  child: HighlightColorPicker(
+                                    colors: HighlightColorPicker.palette,
+                                    selected: themeProv.defaultHighlight,
+                                    onChanged: (color) {
+                                      themeProv.setDefaultHighlight(color);
+                                      _saveHighlight(color);
+                                    },
+                                  ),
+                                ),
+                              ),
                             ),
-                          ],
-                        ),
+                        ],
                       ),
                     ),
                   ),
-                ),
               ],
             ),
-            bottomNavigationBar:
-                _showUI && provider.chapters.length > 1
-                    ? _buildBottomNav(themeProv, provider)
-                    : null,
-          );
-        },
-    );
-  }
-
-  // ponytail: single 2px line with rounded caps, no container wrapper
-  Widget _buildTopProgressBar(ReaderProvider provider) {
-    final fraction = (provider.currentIndex + 1) / provider.chapters.length;
-    return SizedBox(
-      height: 2,
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: fraction.clamp(0.0, 1.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppTheme.accent,
-            borderRadius: BorderRadius.circular(1),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildBottomNav(ThemeProvider themeProv, ReaderProvider provider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      color: Colors.transparent,
-      child: SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton.icon(
-              onPressed: () => _showChapterList(context, provider),
-              icon: const Icon(Icons.list_alt, size: 18),
-              label: const Text('Chapters', style: TextStyle(fontSize: 13)),
-            ),
-            TextButton.icon(
-              onPressed: provider.currentIndex < provider.chapters.length - 1
-                  ? () {
-                      provider.goToNextChapter();
-                      setState(() {
-                        _lastScrollOffset = 0;
-                        _showUI = true;
-                      });
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_right),
-              label: const Text('Next', style: TextStyle(fontSize: 13)),
-            ),
-          ],
-        ),
-      ),
+  TextStyle _readingStyle(ThemeProvider themeProv) {
+    final c = context.colors;
+    final base = AppType.reading(
+      fontSize: themeProv.fontSize,
+      lineHeight: themeProv.lineHeight,
+      color: c.textPrimary,
+    );
+    return base.copyWith(
+      height: themeProv.lineHeight,
     );
   }
 
-  void _showChapterList(BuildContext context, ReaderProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child:
-                  Text('Chapters', style: Theme.of(ctx).textTheme.titleLarge),
-            ),
-            const Divider(height: 0),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: provider.chapters.length,
-                itemBuilder: (ctx, i) {
-                  final ch = provider.chapters[i];
-                  final isCurrent = i == provider.currentIndex;
-                  return ListTile(
-                    selected: isCurrent,
-                    selectedTileColor:
-                        AppTheme.accent.withValues(alpha: 0.1),
-                    leading: Text(
-                      '${i + 1}',
-                      style: TextStyle(
-                        color: isCurrent ? AppTheme.accent : null,
-                        fontWeight:
-                            isCurrent ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                    title: Text(ch.title,
-                        style: TextStyle(
-                          fontWeight: isCurrent
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        )),
-                    trailing: ch.readAt != null
-                        ? const Icon(Icons.check_circle_outline,
-                            size: 18, color: AppTheme.accent)
-                        : null,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      provider.navigateToChapter(i);
-                      setState(() {
-                        _lastScrollOffset = 0;
-                        _showUI = true;
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  double _horizontalPadding(double maxWidth) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final leftover = (screenWidth - maxWidth) / 2;
+    return leftover < 20 ? 20 : leftover;
   }
 
-  void _showReaderSettings(BuildContext context, ThemeProvider themeProv) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => ReaderSettingsPanel(themeProvider: themeProv),
-    );
+  String? _estimateReadingTime(String content) {
+    final words = content.split(RegExp(r'\s+')).length;
+    final mins = (words / 230).round();
+    if (mins < 1) return null;
+    return '$mins min left';
   }
 
-  void _createSnippet(
-      BuildContext context, String text, ReaderProvider provider) {
-    final noteController = TextEditingController();
-    showDialog(
+  Future<void> _saveHighlight(String color) async {
+    final p = _provider!;
+    if (_selectedText == null || _selectedText!.trim().isEmpty) return;
+    if (!_colorPickerVisible) {
+      _showColorPicker();
+      return;
+    }
+    try {
+      final snippetsProvider = context.read<SnippetsProvider>();
+      await snippetsProvider.createSnippet(
+        text: _selectedText!.trim(),
+        color: color,
+        sourceTitle: p.book?.title,
+        sourceUrl: p.book?.sourceUrl,
+        bookId: p.book?.id,
+        chapterId: p.currentChapter?.id,
+        tags: const ['highlight'],
+      );
+      if (mounted) {
+        StashToast.show(
+          context,
+          message: 'Highlighted',
+          icon: Icons.format_color_fill,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        StashToast.show(
+          context,
+          message: 'Failed: $e',
+          icon: Icons.error_outline,
+        );
+      }
+    } finally {
+      _hideToolbar();
+    }
+  }
+
+  Future<void> _createSnippetFromSelection() async {
+    if (_selectedText == null || _selectedText!.trim().isEmpty) return;
+    final p = _provider!;
+    final noteCtrl = TextEditingController();
+    final themeProv = context.read<ThemeProvider>();
+    final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Create Snippet'),
+        backgroundColor: context.colors.bgElevated,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppSpacing.brXl,
+          side: BorderSide(color: context.colors.border, width: 0.5),
+        ),
+        title: const Text('Save snippet'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,84 +492,104 @@ class _ReaderScreenState extends State<ReaderScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.accent.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
+                color: context.colors.accentMuted,
+                borderRadius: AppSpacing.brMd,
               ),
-              child: Text(text,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontStyle: FontStyle.italic)),
+              child: Text(
+                _selectedText!,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.readingItalic(
+                  fontSize: 14,
+                  color: context.colors.textPrimary,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: noteController,
+              controller: noteCtrl,
+              maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Note (optional)',
-                hintText: 'Add a personal note...',
+                hintText: 'Add your thoughts…',
               ),
-              maxLines: 3,
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _saveSnippet(
-                  context, text, noteController.text.trim(), provider);
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.accent,
+            ),
             child: const Text('Save'),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _saveSnippet(BuildContext context, String text, String note,
-      ReaderProvider provider) async {
+    _hideToolbar();
+    if (saved != true) return;
     try {
       final snippetsProvider = context.read<SnippetsProvider>();
       await snippetsProvider.createSnippet(
-        text: text,
-        note: note.isNotEmpty ? note : null,
-        sourceTitle: provider.book?.title,
-        sourceUrl: provider.book?.sourceUrl,
-        bookId: provider.book?.id,
-        chapterId: provider.currentChapter?.id,
+        text: _selectedText!.trim(),
+        note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
+        color: themeProv.defaultHighlight,
+        sourceTitle: p.book?.title,
+        sourceUrl: p.book?.sourceUrl,
+        bookId: p.book?.id,
+        chapterId: p.currentChapter?.id,
       );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Snippet created!')),
+      if (mounted) {
+        StashToast.show(
+          context,
+          message: 'Snippet saved',
+          icon: Icons.bookmark_add,
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create snippet: $e')),
+      if (mounted) {
+        StashToast.show(
+          context,
+          message: 'Failed: $e',
+          icon: Icons.error_outline,
         );
       }
     }
+  }
+
+  void _openChapters(BuildContext context, ReaderProvider provider) {
+    if (provider.chapters.length <= 1) return;
+    ChapterSheet.show(
+      context,
+      bookTitle: provider.book?.title ?? '',
+      chapters: provider.chapters,
+      currentIndex: provider.currentIndex,
+      onSelect: (i) {
+        provider.navigateToChapter(i);
+        setState(() {
+          _lastScrollOffset = 0;
+          _showUI = true;
+        });
+      },
+    );
   }
 
   String _stripHtml(String html) {
     return html
         .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</(?:p|div|h[1-6]|li|blockquote|tr|th|td)>', caseSensitive: false), '\n\n')
+        .replaceAll(RegExp(r'</(?:p|div|h[1-6]|li|blockquote|tr|th|td)>',
+            caseSensitive: false), '\n\n')
         .replaceAll(RegExp(r'<[^>]*>'), '')
         .replaceAll(RegExp(r'[ \t]+'), ' ')
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
-  }
-
-  String _resolveFont(ThemeProvider themeProv) {
-    if (themeProv.googleFont != null && themeProv.googleFont!.isNotEmpty) {
-      return themeProv.googleFont!;
-    }
-    return themeProv.fontFamily;
   }
 }

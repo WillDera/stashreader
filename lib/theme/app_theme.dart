@@ -1,334 +1,522 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'tokens/app_colors.dart';
+import 'tokens/app_spacing.dart';
+import 'tokens/app_type.dart';
 
+/// StashReader theme — built from design tokens (colors, type, spacing).
+///
+/// Three modes: Light (warm paper), Dark (cool charcoal), Sepia (paper-like).
+/// Single sophisticated indigo anchor (`AppColors.accentIndigo`).
 class AppTheme {
-  // Accent — warm terracotta
-  static const Color accent = Color(0xFFC4734F);
-  static const Color accentLight = Color(0xFFD4936F);
+  AppTheme._();
 
-  // Light mode
-  static const Color lightBackground = Color(0xFFF8F6F0);
-  static const Color lightSurface = Color(0xFFFFFCF7);
-  static const Color lightText = Color(0xFF2C2C2C);
-  static const Color lightTextSecondary = Color(0xFF8B8B8B);
-  static const Color lightBorder = Color(0xFFEBE7DE);
+  // ─── Accent ─────────────────────────────────────────────────────────────
+  static const Color accent = AppColors.lightAccent;
+  static const Color accentDark = AppColors.darkAccent;
+  static const Color accentSepia = AppColors.sepiaAccent;
 
-  // Dark mode
-  static const Color darkBackground = Color(0xFF1C1B1A);
-  static const Color darkSurface = Color(0xFF282725);
-  static const Color darkText = Color(0xFFE8E4DE);
-  static const Color darkTextSecondary = Color(0xFF9A9690);
-  static const Color darkBorder = Color(0xFF3A3835);
+  // Backwards-compat aliases (kept so existing call-sites still compile
+  // during the rewrite). New code should use `AppColors.*` directly.
+  static const Color accentLight = AppColors.accentAmber;
+  static const Color lightBackground = AppColors.lightBg;
+  static const Color lightSurface = AppColors.lightSurface;
+  static const Color lightText = AppColors.lightTextPrimary;
+  static const Color lightTextSecondary = AppColors.lightTextSecondary;
+  static const Color lightBorder = AppColors.lightBorder;
+  static const Color darkBackground = AppColors.darkBg;
+  static const Color darkSurface = AppColors.darkSurface;
+  static const Color darkText = AppColors.darkTextPrimary;
+  static const Color darkTextSecondary = AppColors.darkTextSecondary;
+  static const Color darkBorder = AppColors.darkBorder;
+  static const Color sepiaBackground = AppColors.sepiaBg;
+  static const Color sepiaSurface = AppColors.sepiaSurface;
+  static const Color sepiaText = AppColors.sepiaTextPrimary;
+  static const Color sepiaTextSecondary = AppColors.sepiaTextSecondary;
+  static const Color sepiaBorder = AppColors.sepiaBorder;
+  static const Color sepiaAccent = AppColors.sepiaAccent;
 
-  // Sepia mode
-  static const Color sepiaBackground = Color(0xFFF5EBD9);
-  static const Color sepiaSurface = Color(0xFFFBF3E8);
-  static const Color sepiaText = Color(0xFF5C4A3A);
-  static const Color sepiaTextSecondary = Color(0xFF8A7A6A);
-  static const Color sepiaBorder = Color(0xFFE4D5C0);
-  static const Color sepiaAccent = Color(0xFFB8774A);
+  // ─── Public entry points ───────────────────────────────────────────────
+  static ThemeData lightTheme() => _buildTheme(
+        brightness: Brightness.light,
+        bg: AppColors.lightBg,
+        bgElevated: AppColors.lightBgElevated,
+        surface: AppColors.lightSurface,
+        surfaceMuted: AppColors.lightSurfaceMuted,
+        border: AppColors.lightBorder,
+        borderStrong: AppColors.lightBorderStrong,
+        textPrimary: AppColors.lightTextPrimary,
+        textSecondary: AppColors.lightTextSecondary,
+        textTertiary: AppColors.lightTextTertiary,
+        accent: AppColors.lightAccent,
+        accentMuted: AppColors.lightAccentMuted,
+        onAccent: AppColors.lightOnAccent,
+      );
 
-  static ThemeData lightTheme({
-    String fontFamily = 'System',
-    String? googleFont,
-    double fontSize = 16.0,
-    double lineHeight = 1.6,
+  static ThemeData darkTheme() => _buildTheme(
+        brightness: Brightness.dark,
+        bg: AppColors.darkBg,
+        bgElevated: AppColors.darkBgElevated,
+        surface: AppColors.darkSurface,
+        surfaceMuted: AppColors.darkSurfaceMuted,
+        border: AppColors.darkBorder,
+        borderStrong: AppColors.darkBorderStrong,
+        textPrimary: AppColors.darkTextPrimary,
+        textSecondary: AppColors.darkTextSecondary,
+        textTertiary: AppColors.darkTextTertiary,
+        accent: AppColors.darkAccent,
+        accentMuted: AppColors.darkAccentMuted,
+        onAccent: AppColors.darkOnAccent,
+      );
+
+  static ThemeData sepiaTheme() => _buildTheme(
+        brightness: Brightness.light,
+        bg: AppColors.sepiaBg,
+        bgElevated: AppColors.sepiaBgElevated,
+        surface: AppColors.sepiaSurface,
+        surfaceMuted: AppColors.sepiaSurfaceMuted,
+        border: AppColors.sepiaBorder,
+        borderStrong: AppColors.sepiaBorderStrong,
+        textPrimary: AppColors.sepiaTextPrimary,
+        textSecondary: AppColors.sepiaTextSecondary,
+        textTertiary: AppColors.sepiaTextTertiary,
+        accent: AppColors.sepiaAccent,
+        accentMuted: AppColors.sepiaAccentMuted,
+        onAccent: AppColors.sepiaOnAccent,
+      );
+
+  // ─── Builder ───────────────────────────────────────────────────────────
+  static ThemeData _buildTheme({
+    required Brightness brightness,
+    required Color bg,
+    required Color bgElevated,
+    required Color surface,
+    required Color surfaceMuted,
+    required Color border,
+    required Color borderStrong,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color textTertiary,
+    required Color accent,
+    required Color accentMuted,
+    required Color onAccent,
   }) {
-    final textTheme = _buildTextTheme(fontFamily, googleFont);
-    final colorScheme = ColorScheme.light(
+    final textTheme = AppType.ui().apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    );
+
+    final colorScheme = ColorScheme(
+      brightness: brightness,
       primary: accent,
-      secondary: accentLight,
-      surface: lightSurface,
-      onSurface: lightText,
-      onPrimary: Colors.white,
+      onPrimary: onAccent,
+      secondary: accent,
+      onSecondary: onAccent,
+      tertiary: accent,
+      onTertiary: onAccent,
+      error: AppColors.danger,
+      onError: Colors.white,
+      surface: surface,
+      onSurface: textPrimary,
+      surfaceContainerHighest: surfaceMuted,
+      outline: border,
+      outlineVariant: border,
+      shadow: Colors.black,
+      scrim: Colors.black,
+      inverseSurface: textPrimary,
+      onInverseSurface: bg,
+      inversePrimary: accentMuted,
+      surfaceTint: accent,
     );
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: lightBackground,
-      fontFamily: _resolveFont(fontFamily, googleFont),
+      scaffoldBackgroundColor: bg,
+      canvasColor: bg,
+      fontFamily: AppType.uiFont,
       textTheme: textTheme,
+      primaryTextTheme: textTheme,
+      splashFactory: InkSparkle.splashFactory,
+      hoverColor: accent.withValues(alpha: 0.06),
+      focusColor: accent.withValues(alpha: 0.12),
+      highlightColor: accent.withValues(alpha: 0.08),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: lightText,
+        foregroundColor: textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+        titleTextStyle: textTheme.titleLarge?.copyWith(color: textPrimary),
+        iconTheme: IconThemeData(color: textPrimary, size: 22),
+        systemOverlayStyle: brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
       ),
       cardTheme: CardThemeData(
-        color: lightSurface,
-        elevation: 3,
-        shadowColor: const Color(0x26000000),
+        color: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppSpacing.brLg,
+          side: BorderSide(color: border, width: 0.5),
         ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: lightSurface,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: surface,
         selectedItemColor: accent,
-        unselectedItemColor: lightTextSecondary,
+        unselectedItemColor: textTertiary,
         elevation: 0,
         type: BottomNavigationBarType.fixed,
+        showUnselectedLabels: true,
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: accent,
-        foregroundColor: Colors.white,
-      ),
-      dividerTheme: const DividerThemeData(
-        color: lightBorder,
-        thickness: 0.5,
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: lightBackground,
-        side: const BorderSide(color: lightBorder),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: accentMuted,
+        labelTextStyle: WidgetStatePropertyAll(
+          textTheme.labelMedium?.copyWith(color: textPrimary),
         ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: lightSurface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightBorder),
+        iconTheme: WidgetStatePropertyAll(
+          IconThemeData(color: textSecondary, size: 22),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: accent, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-      ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-      ),
-    );
-  }
-
-  static ThemeData darkTheme({
-    String fontFamily = 'System',
-    String? googleFont,
-    double fontSize = 16.0,
-    double lineHeight = 1.6,
-  }) {
-    final textTheme = _buildTextTheme(fontFamily, googleFont);
-    final colorScheme = ColorScheme.dark(
-      primary: accent,
-      secondary: accentLight,
-      surface: darkSurface,
-      onSurface: darkText,
-      onPrimary: Colors.white,
-    );
-
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: darkBackground,
-      fontFamily: _resolveFont(fontFamily, googleFont),
-      textTheme: textTheme,
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: darkText,
+        height: 64,
         elevation: 0,
-        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
-      cardTheme: CardThemeData(
-        color: darkSurface,
-        elevation: 3,
-        shadowColor: const Color(0x26000000),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: darkSurface,
-        selectedItemColor: accent,
-        unselectedItemColor: darkTextSecondary,
-        elevation: 0,
-        type: BottomNavigationBarType.fixed,
-      ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: accent,
-        foregroundColor: Colors.white,
+        foregroundColor: onAccent,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppSpacing.brLg,
+        ),
+        extendedTextStyle: textTheme.labelLarge?.copyWith(color: onAccent),
       ),
-      dividerTheme: const DividerThemeData(
-        color: darkBorder,
+      dividerTheme: DividerThemeData(
+        color: border,
         thickness: 0.5,
+        space: 0.5,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: darkBackground,
-        side: const BorderSide(color: darkBorder),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        backgroundColor: surfaceMuted,
+        selectedColor: accentMuted,
+        disabledColor: surfaceMuted,
+        labelStyle: textTheme.labelMedium?.copyWith(color: textPrimary),
+        secondaryLabelStyle: textTheme.labelMedium?.copyWith(color: accent),
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        iconTheme: IconThemeData(color: textSecondary, size: 14),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: darkBackground,
+        fillColor: surfaceMuted,
+        hoverColor: surfaceMuted,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: textTheme.bodyLarge?.copyWith(color: textTertiary),
+        labelStyle: textTheme.bodyMedium?.copyWith(color: textSecondary),
+        floatingLabelStyle: textTheme.labelMedium?.copyWith(color: accent),
+        helperStyle: textTheme.bodySmall?.copyWith(color: textTertiary),
+        errorStyle: textTheme.bodySmall?.copyWith(color: AppColors.danger),
+        prefixIconColor: textSecondary,
+        suffixIconColor: textSecondary,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: darkBorder),
+          borderRadius: AppSpacing.brSm,
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: darkBorder),
+          borderRadius: AppSpacing.brSm,
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: accent, width: 1.5),
+          borderRadius: AppSpacing.brSm,
+          borderSide: BorderSide(color: accent, width: 1.2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        errorBorder: OutlineInputBorder(
+          borderRadius: AppSpacing.brSm,
+          borderSide: BorderSide(color: AppColors.danger, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: AppSpacing.brSm,
+          borderSide: BorderSide(color: AppColors.danger, width: 1.2),
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
+        backgroundColor: textPrimary,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: bg),
+        actionTextColor: accent,
+        disabledActionTextColor: textTertiary,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppSpacing.brMd,
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-      ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-      ),
-    );
-  }
-
-  // ponytail: sepia theme duplicates a lot from lightTheme — acceptable for 3 distinct palettes, refactor to shared helper if adding a 4th
-  static ThemeData sepiaTheme({
-    String fontFamily = 'System',
-    String? googleFont,
-    double fontSize = 16.0,
-    double lineHeight = 1.6,
-  }) {
-    final textTheme = _buildTextTheme(fontFamily, googleFont);
-    final colorScheme = ColorScheme.light(
-      primary: sepiaAccent,
-      secondary: accentLight,
-      surface: sepiaSurface,
-      onSurface: sepiaText,
-      onPrimary: Colors.white,
-    );
-
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: sepiaBackground,
-      fontFamily: _resolveFont(fontFamily, googleFont),
-      textTheme: textTheme,
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: sepiaText,
-        elevation: 0,
-        scrolledUnderElevation: 0,
+        backgroundColor: bgElevated,
         surfaceTintColor: Colors.transparent,
-      ),
-      cardTheme: CardThemeData(
-        color: sepiaSurface,
-        elevation: 3,
-        shadowColor: const Color(0x1A000000),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: sepiaSurface,
-        selectedItemColor: sepiaAccent,
-        unselectedItemColor: sepiaTextSecondary,
         elevation: 0,
-        type: BottomNavigationBarType.fixed,
-      ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: sepiaAccent,
-        foregroundColor: Colors.white,
-      ),
-      dividerTheme: const DividerThemeData(
-        color: sepiaBorder,
-        thickness: 0.5,
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: sepiaBackground,
-        side: const BorderSide(color: sepiaBorder),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppSpacing.brXl,
+          side: BorderSide(color: border, width: 0.5),
         ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(color: textPrimary),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: textSecondary),
+        alignment: Alignment.center,
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: sepiaSurface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: sepiaBorder),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: bgElevated,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: bgElevated,
+        modalElevation: 0,
+        elevation: 0,
+        showDragHandle: false,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: AppSpacing.rXl),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: sepiaBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: sepiaAccent, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        constraints: const BoxConstraints(maxWidth: 560),
       ),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      dialogTheme: DialogThemeData(
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        iconColor: textSecondary,
+        textColor: textPrimary,
+        titleTextStyle: textTheme.bodyLarge?.copyWith(color: textPrimary),
+        subtitleTextStyle: textTheme.bodySmall?.copyWith(color: textSecondary),
+        leadingAndTrailingTextStyle:
+            textTheme.labelMedium?.copyWith(color: textSecondary),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppSpacing.brMd,
         ),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
+      sliderTheme: SliderThemeData(
+        activeTrackColor: accent,
+        inactiveTrackColor: border,
+        thumbColor: accent,
+        overlayColor: accent.withValues(alpha: 0.12),
+        valueIndicatorColor: textPrimary,
+        valueIndicatorTextStyle:
+            textTheme.labelSmall?.copyWith(color: bg),
+        trackHeight: 3,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return borderStrong;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return accent.withValues(alpha: 0.35);
+          }
+          return surfaceMuted;
+        }),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return Colors.transparent;
+        }),
+        checkColor: WidgetStateProperty.all(onAccent),
+        side: BorderSide(color: borderStrong, width: 1.5),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.circular(6),
         ),
       ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return borderStrong;
+        }),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: accent,
+        linearTrackColor: border,
+        circularTrackColor: border,
+        linearMinHeight: 2,
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: textPrimary,
+        unselectedLabelColor: textSecondary,
+        indicatorColor: accent,
+        indicatorSize: TabBarIndicatorSize.label,
+        labelStyle: textTheme.labelLarge,
+        unselectedLabelStyle: textTheme.labelLarge,
+        dividerColor: Colors.transparent,
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: textPrimary,
+          borderRadius: AppSpacing.brSm,
+        ),
+        textStyle: textTheme.labelSmall?.copyWith(color: bg),
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 400),
+      ),
+      iconTheme: IconThemeData(color: textSecondary, size: 22),
+      primaryIconTheme: IconThemeData(color: textPrimary, size: 22),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: accent,
+        selectionColor: accent.withValues(alpha: 0.20),
+        selectionHandleColor: accent,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: bgElevated,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppSpacing.brMd,
+          side: BorderSide(color: border, width: 0.5),
+        ),
+        textStyle: textTheme.bodyMedium?.copyWith(color: textPrimary),
+        labelTextStyle: WidgetStatePropertyAll(
+          textTheme.bodyMedium?.copyWith(color: textPrimary),
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(bgElevated),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(0),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: AppSpacing.brMd,
+              side: BorderSide(color: border, width: 0.5),
+            ),
+          ),
+        ),
+      ),
+      extensions: <ThemeExtension<dynamic>>[
+        StashReaderColors(
+          bg: bg,
+          bgElevated: bgElevated,
+          surface: surface,
+          surfaceMuted: surfaceMuted,
+          border: border,
+          borderStrong: borderStrong,
+          textPrimary: textPrimary,
+          textSecondary: textSecondary,
+          textTertiary: textTertiary,
+          accent: accent,
+          accentMuted: accentMuted,
+          onAccent: onAccent,
+        ),
+      ],
+    );
+  }
+}
+
+/// Custom theme extension exposing our semantic color tokens directly
+/// (no more `isDark ? X : Y` ladders in every widget).
+@immutable
+class StashReaderColors extends ThemeExtension<StashReaderColors> {
+  final Color bg;
+  final Color bgElevated;
+  final Color surface;
+  final Color surfaceMuted;
+  final Color border;
+  final Color borderStrong;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textTertiary;
+  final Color accent;
+  final Color accentMuted;
+  final Color onAccent;
+
+  const StashReaderColors({
+    required this.bg,
+    required this.bgElevated,
+    required this.surface,
+    required this.surfaceMuted,
+    required this.border,
+    required this.borderStrong,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textTertiary,
+    required this.accent,
+    required this.accentMuted,
+    required this.onAccent,
+  });
+
+  @override
+  StashReaderColors copyWith({
+    Color? bg,
+    Color? bgElevated,
+    Color? surface,
+    Color? surfaceMuted,
+    Color? border,
+    Color? borderStrong,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? textTertiary,
+    Color? accent,
+    Color? accentMuted,
+    Color? onAccent,
+  }) {
+    return StashReaderColors(
+      bg: bg ?? this.bg,
+      bgElevated: bgElevated ?? this.bgElevated,
+      surface: surface ?? this.surface,
+      surfaceMuted: surfaceMuted ?? this.surfaceMuted,
+      border: border ?? this.border,
+      borderStrong: borderStrong ?? this.borderStrong,
+      textPrimary: textPrimary ?? this.textPrimary,
+      textSecondary: textSecondary ?? this.textSecondary,
+      textTertiary: textTertiary ?? this.textTertiary,
+      accent: accent ?? this.accent,
+      accentMuted: accentMuted ?? this.accentMuted,
+      onAccent: onAccent ?? this.onAccent,
     );
   }
 
-  static TextTheme _buildTextTheme(String fontFamily, String? googleFont) {
-    final baseFont = _resolveFont(fontFamily, googleFont);
-    return TextTheme(
-      displayLarge: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w700),
-      displayMedium: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w600),
-      headlineLarge: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w600),
-      headlineMedium: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w600),
-      titleLarge: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w600),
-      titleMedium: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w500),
-      bodyLarge: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w400),
-      bodyMedium: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w400),
-      labelLarge: TextStyle(fontFamily: baseFont, fontWeight: FontWeight.w500),
+  @override
+  StashReaderColors lerp(ThemeExtension<StashReaderColors>? other, double t) {
+    if (other is! StashReaderColors) return this;
+    return StashReaderColors(
+      bg: Color.lerp(bg, other.bg, t)!,
+      bgElevated: Color.lerp(bgElevated, other.bgElevated, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
+      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
+      textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+      accentMuted: Color.lerp(accentMuted, other.accentMuted, t)!,
+      onAccent: Color.lerp(onAccent, other.onAccent, t)!,
     );
   }
+}
 
-  static String _resolveFont(String fontFamily, String? googleFont) {
-    if (googleFont != null && googleFont.isNotEmpty) {
-      return googleFont;
-    }
-    return fontFamily;
+/// Convenience accessor — `context.colors` returns the StashReaderColors
+/// extension for the current theme. Falls back to light tokens if the
+/// extension is missing (it never should be — we set it in app_theme).
+extension StashReaderColorsAccess on BuildContext {
+  StashReaderColors get colors {
+    final ext = Theme.of(this).extension<StashReaderColors>();
+    if (ext != null) return ext;
+    return const StashReaderColors(
+      bg: AppColors.lightBg,
+      bgElevated: AppColors.lightBgElevated,
+      surface: AppColors.lightSurface,
+      surfaceMuted: AppColors.lightSurfaceMuted,
+      border: AppColors.lightBorder,
+      borderStrong: AppColors.lightBorderStrong,
+      textPrimary: AppColors.lightTextPrimary,
+      textSecondary: AppColors.lightTextSecondary,
+      textTertiary: AppColors.lightTextTertiary,
+      accent: AppColors.lightAccent,
+      accentMuted: AppColors.lightAccentMuted,
+      onAccent: AppColors.lightOnAccent,
+    );
   }
 }

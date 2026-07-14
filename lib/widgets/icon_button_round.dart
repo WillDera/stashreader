@@ -1,0 +1,64 @@
+import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+import '../theme/tokens/app_motion.dart';
+import '../theme/tokens/app_spacing.dart';
+import 'animated_press.dart';
+
+enum IconButtonVariant { plain, filled, tonal }
+
+/// A round icon button. 36 / 40 / 44 sizes. Three variants.
+class IconButtonRound extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final double size;
+  final IconButtonVariant variant;
+  final String? tooltip;
+  final Color? iconColor;
+  final Color? backgroundColor;
+
+  const IconButtonRound({
+    super.key,
+    required this.icon,
+    this.onPressed,
+    this.size = 40,
+    this.variant = IconButtonVariant.tonal,
+    this.tooltip,
+    this.iconColor,
+    this.backgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final disabled = onPressed == null;
+
+    final (bg, fg) = switch (variant) {
+      IconButtonVariant.plain => (Colors.transparent, iconColor ?? c.textPrimary),
+      IconButtonVariant.filled => (backgroundColor ?? c.surfaceMuted, iconColor ?? c.textPrimary),
+      IconButtonVariant.tonal => (Colors.transparent, iconColor ?? c.textSecondary),
+    };
+
+    final btn = AnimatedPress(
+      onTap: onPressed,
+      scaleDown: 0.92,
+      duration: AppMotion.fast,
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: AppSpacing.brPill,
+        ),
+        child: Icon(icon, size: size * 0.48, color: fg),
+      ),
+    );
+
+    final wrapped = disabled
+        ? Opacity(opacity: 0.4, child: btn)
+        : btn;
+
+    if (tooltip == null) return wrapped;
+    return Tooltip(message: tooltip!, child: wrapped);
+  }
+}

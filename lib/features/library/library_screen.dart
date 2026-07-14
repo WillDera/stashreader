@@ -10,7 +10,18 @@ import '../../core/services/epub_service.dart';
 import '../../core/services/web_scraper_service.dart';
 import '../../core/services/cache_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/book_card.dart';
+import '../../theme/theme_provider.dart';
+import '../../widgets/continue_reading_shelf.dart';
+import '../../widgets/dialog_sheet.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/icon_button_round.dart';
+import '../../widgets/import_sheet.dart';
+import '../../widgets/library_book_card.dart';
+import '../../widgets/library_header.dart';
+import '../../widgets/loading_skeleton.dart';
+import '../../widgets/premium_button.dart';
+import '../../widgets/reading_streak_card.dart';
+import '../../widgets/toast.dart';
 import '../reader/reader_screen.dart';
 import '../snippets/snippets_provider.dart';
 import 'library_provider.dart';
@@ -33,207 +44,236 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final leftHanded =
+        context.watch<ThemeProvider>().handMode == HandMode.left;
     return Consumer<LibraryProvider>(
       builder: (context, provider, _) {
-        return Scaffold(
-          body: SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Custom header — no AppBar
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: provider.selectionMode
-                            ? Text(
-                                '${provider.selectedIds.length} selected',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              )
-                            : Text(
-                                'Library',
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                      ),
-                      if (provider.selectionMode) ...[
-                        _iconButton(
-                          icon: Icons.close,
-                          onTap: () => provider.clearSelection(),
-                        ),
-                        const SizedBox(width: 4),
-                        _iconButton(
-                          icon: Icons.delete,
-                          onTap: () => _confirmDelete(context, provider),
-                        ),
-                      ] else ...[
-                        _iconButton(
-                          icon: provider.isGridView ? Icons.view_list : Icons.grid_view,
-                          onTap: () => provider.toggleLayout(),
-                        ),
-                        const SizedBox(width: 4),
-                        _iconButton(
-                          icon: Icons.add,
-                          onTap: () => _showImportOptions(context),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                // Content
-                Expanded(child: _buildBody(context, provider)),
-              ],
+        return Stack(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(context, provider),
+                  Expanded(child: _buildBody(context, provider)),
+                ],
+              ),
             ),
-          ),
-          floatingActionButton: provider.selectionMode ? null : _buildFAB(context),
+            if (!provider.loading && !provider.selectionMode && provider.books.isNotEmpty)
+              Positioned(
+                left: leftHanded ? 20 : null,
+                right: leftHanded ? null : 20,
+                bottom: 12,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Grid / List toggle icon
+                    IconButtonRound(
+                      icon: provider.isGridView
+                          ? Icons.list
+                          : Icons.grid_view_rounded,
+                      size: 44,
+                      variant: IconButtonVariant.filled,
+                      backgroundColor: context.colors.surfaceMuted,
+                      iconColor: context.colors.textPrimary,
+                      onPressed: provider.toggleLayout,
+                    ),
+                    const SizedBox(height: 10),
+                    // Add / Import FAB
+                    IconButtonRound(
+                      icon: Icons.add,
+                      size: 52,
+                      variant: IconButtonVariant.filled,
+                      backgroundColor: context.colors.accent,
+                      iconColor: context.colors.onAccent,
+                      onPressed: () => _showImportOptions(context),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         );
       },
     );
   }
 
-  Widget _iconButton({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, size: 22),
-      ),
+  Widget _buildHeader(BuildContext context, LibraryProvider provider) {
+    if (provider.selectionMode) {
+      return LibraryHeader(
+        title: '${provider.selectedIds.length} selected',
+        actions: [
+          IconButtonRound(
+            icon: Icons.delete_outline,
+            size: 40,
+            variant: IconButtonVariant.tonal,
+            iconColor: const Color(0xFFC44C4C),
+            onPressed: () => _confirmDelete(context, provider),
+          ),
+          const SizedBox(width: 8),
+          IconButtonRound(
+            icon: Icons.close,
+            size: 40,
+            variant: IconButtonVariant.tonal,
+            onPressed: provider.clearSelection,
+          ),
+          const SizedBox(width: 8),
+        ],
+      );
+    }
+    return LibraryHeader(
+      title: 'Library',
+      subtitle: _librarySubtitle(provider.books),
+      titleSize: 32,
+      actions: [],
     );
   }
 
-  void _confirmDelete(BuildContext context, LibraryProvider provider) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove books?'),
-        content: Text(
-            'Delete ${provider.selectedIds.length} book(s) and all their chapters?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+  String? _librarySubtitle(List<Book> books) {
+    if (books.isEmpty) return null;
+    final reading = books.where((b) => b.progress > 0 && b.progress < 1).length;
+    if (reading == 0) return '${books.length} book${books.length == 1 ? '' : 's'}';
+    return '$reading reading · ${books.length} total';
+  }
+
+  Widget _buildBody(BuildContext context, LibraryProvider provider) {
+    if (provider.loading && provider.books.isEmpty) {
+      return _buildLoading(context);
+    }
+    if (provider.error != null) {
+      return EmptyState(
+        icon: Icons.error_outline,
+        title: 'Something went wrong',
+        subtitle: provider.error!,
+        primaryActionLabel: 'Try again',
+        primaryActionIcon: Icons.refresh,
+        onPrimaryAction: () => provider.loadBooks(),
+      );
+    }
+    if (provider.books.isEmpty) return _buildEmpty(context);
+    return Expanded(
+      child: provider.isGridView
+          ? _buildGrid(context, provider)
+          : _buildList(context, provider),
+    );
+  }
+
+  Widget _buildLoading(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: Column(
+        children: [
+          const Skeleton(height: 18, width: 120),
+          const SizedBox(height: 16),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.62,
+              ),
+              itemCount: 6,
+              itemBuilder: (_, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Skeleton(
+                    height: 200,
+                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                  ),
+                  SizedBox(height: 8),
+                  Skeleton(height: 12, width: 100),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
-    if (confirmed == true) {
-      await provider.deleteSelected();
-    }
   }
 
-  Widget _buildBody(BuildContext context, LibraryProvider provider) {
-    if (provider.loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (provider.error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, size: 48, color: AppTheme.accent.withValues(alpha: 0.6)),
-              const SizedBox(height: 16),
-              Text('Something went wrong', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(provider.error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => provider.loadBooks(),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (provider.books.isEmpty) {
-      return _buildEmptyState(context);
-    }
-    return provider.isGridView
-        ? _buildGridView(context, provider)
-        : _buildListView(context, provider);
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(48),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.auto_stories_rounded,
-              size: 56,
-              color: AppTheme.accent.withValues(alpha: 0.35),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Your library is empty',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Import an EPUB file, add web content, or create a note to get started.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.lightTextSecondary,
-                    height: 1.5,
-                  ),
-            ),
-            const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: () => _showImportOptions(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Content'),
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
-            ),
-          ],
-        ),
-      ),
+  Widget _buildEmpty(BuildContext context) {
+    return EmptyState(
+      icon: Icons.auto_stories_outlined,
+      title: 'Your library is empty',
+      subtitle:
+          'Import an EPUB, paste a URL, or write a note to begin your reading collection.',
+      primaryActionLabel: 'Add to library',
+      primaryActionIcon: Icons.add,
+      onPrimaryAction: () => _showImportOptions(context),
     );
   }
 
-  Widget _buildGridView(BuildContext context, LibraryProvider provider) {
-    final continueBooks = provider.books.where((b) => b.progress > 0 && b.progress < 1.0).toList();
+  Widget _buildGrid(BuildContext context, LibraryProvider provider) {
+    final continueBooks =
+        provider.books.where((b) => b.progress > 0 && b.progress < 1.0).toList();
     return RefreshIndicator(
+      color: context.colors.accent,
+      backgroundColor: context.colors.surface,
       onRefresh: () => provider.loadBooks(),
       child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           if (continueBooks.isNotEmpty)
             SliverToBoxAdapter(
-              child: _buildContinueReading(context, continueBooks, provider),
+              child: ContinueReadingShelf(
+                books: continueBooks,
+                onTap: (b) => _openReader(context, b.id),
+              ),
             ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            sliver: SliverToBoxAdapter(
+              child: ReadingStreakCard(
+                minutesPerDay: List.filled(7, 0),
+                currentStreak: 0,
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  Text(
+                    'All books',
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${provider.books.length}',
+                    style: TextStyle(
+                      color: context.colors.textTertiary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200,
-                mainAxisExtent: 340,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 18,
+                crossAxisSpacing: 18,
+                childAspectRatio: 0.6,
               ),
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final book = provider.books[index];
-                  final selected = provider.selectedIds.contains(book.id);
-                  return BookCard(
+                  return LibraryBookCard(
                     book: book,
-                    variant: BookCardVariant.grid,
-                    selected: selected,
+                    variant: LibraryCardVariant.grid,
+                    selected: provider.selectedIds.contains(book.id),
                     selectionMode: provider.selectionMode,
                     onTap: () {
                       if (provider.selectionMode) {
@@ -254,239 +294,88 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _buildListView(BuildContext context, LibraryProvider provider) {
-    final continueBooks = provider.books.where((b) => b.progress > 0 && b.progress < 1.0).toList();
+  Widget _buildList(BuildContext context, LibraryProvider provider) {
     return RefreshIndicator(
+      color: context.colors.accent,
+      backgroundColor: context.colors.surface,
       onRefresh: () => provider.loadBooks(),
-      child: CustomScrollView(
-        slivers: [
-          if (continueBooks.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildContinueReading(context, continueBooks, provider),
-            ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final book = provider.books[index];
-                final selected = provider.selectedIds.contains(book.id);
-                return BookCard(
-                  book: book,
-                  selected: selected,
-                  selectionMode: provider.selectionMode,
-                  variant: BookCardVariant.list,
-                  onTap: () {
-                    if (provider.selectionMode) {
-                      provider.toggleSelection(book.id);
-                    } else {
-                      _openReader(context, book.id);
-                    }
-                  },
-                  onLongPress: () {
-                    provider.toggleSelection(book.id);
-                  },
-                );
-              },
-              childCount: provider.books.length,
-            ),
-          ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
-        ],
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: provider.books.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 4),
+        itemBuilder: (context, i) {
+          final book = provider.books[i];
+          return LibraryBookCard(
+            book: book,
+            variant: LibraryCardVariant.list,
+            selected: provider.selectedIds.contains(book.id),
+            selectionMode: provider.selectionMode,
+            onTap: () {
+              if (provider.selectionMode) {
+                provider.toggleSelection(book.id);
+              } else {
+                _openReader(context, book.id);
+              }
+            },
+            onLongPress: () => provider.toggleSelection(book.id),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildContinueReading(BuildContext context, List<Book> books, LibraryProvider provider) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+  void _confirmDelete(BuildContext context, LibraryProvider provider) async {
+    final confirmed = await StashDialog.show<bool>(
+      context,
+      title: 'Remove books?',
+      content:
+          'Delete ${provider.selectedIds.length} book${provider.selectedIds.length == 1 ? '' : 's'} and all their chapters?',
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
           child: Text(
-            'Continue Reading',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.accent,
-                ),
+            'Cancel',
+            style: TextStyle(color: context.colors.textSecondary),
           ),
         ),
-        SizedBox(
-          height: 124,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: books.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final book = books[index];
-              return _buildContinueCard(context, book);
-            },
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            'Delete',
+            style: TextStyle(color: Color(0xFFC44C4C)),
           ),
         ),
-        const SizedBox(height: 8),
       ],
     );
-  }
-
-  Widget _buildContinueCard(BuildContext context, Book book) {
-    return GestureDetector(
-      onTap: () => _openReader(context, book.id),
-      child: SizedBox(
-        width: 110,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Cover — no card wrapper
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                height: 80,
-                width: double.infinity,
-                child: book.coverPath != null && book.coverPath!.isNotEmpty
-                    ? Image.file(
-                        File(book.coverPath!),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _continuePlaceholder(book),
-                      )
-                    : _continuePlaceholder(book),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    book.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: book.progress.clamp(0.0, 1.0),
-                      minHeight: 3,
-                      backgroundColor: Theme.of(context).brightness == Brightness.dark
-                          ? AppTheme.darkBorder
-                          : AppTheme.lightBorder,
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.accent),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _continuePlaceholder(Book book) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.accent.withValues(alpha: 0.1),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            book.source == 'web' ? Icons.language : Icons.auto_stories,
-            color: AppTheme.accent.withValues(alpha: 0.6),
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFAB(BuildContext context) {
-    return FloatingActionButton(
-      heroTag: 'library_fab',
-      onPressed: () => _showImportOptions(context),
-      child: const Icon(Icons.add),
-    );
+    if (confirmed == true) {
+      await provider.deleteSelected();
+    }
   }
 
   void _showImportOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Add to Library', style: Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              _importOption(
-                icon: Icons.file_present,
-                title: 'Import File',
-                subtitle: 'EPUB, TXT, or Markdown',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _importFile(context);
-                },
-              ),
-              _importOption(
-                icon: Icons.language,
-                title: 'Add URL',
-                subtitle: 'Import web content',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showAddUrlDialog(context);
-                },
-              ),
-              _importOption(
-                icon: Icons.edit_note,
-                title: 'Add Note',
-                subtitle: 'Create a manual snippet',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showAddNoteDialog(context);
-                },
-              ),
-            ],
-          ),
+    ImportSheet.show(
+      context,
+      options: [
+        ImportOption(
+          icon: Icons.file_present_outlined,
+          title: 'Import file',
+          subtitle: 'EPUB, TXT, or Markdown',
+          onTap: () => _importFile(context),
         ),
-      ),
-    );
-  }
-
-  Widget _importOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, color: AppTheme.accent, size: 24),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ],
+        ImportOption(
+          icon: Icons.link,
+          title: 'Add URL',
+          subtitle: 'Save a web article for offline',
+          onTap: () => _showAddUrlDialog(context),
         ),
-      ),
+        ImportOption(
+          icon: Icons.edit_note,
+          title: 'New snippet',
+          subtitle: 'Capture a thought or quote',
+          onTap: () => _showAddNoteDialog(context),
+        ),
+      ],
     );
   }
 
@@ -498,7 +387,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         allowMultiple: false,
       );
       if (result == null || result.files.isEmpty) return;
-
+      if (!context.mounted) return;
       final file = result.files.single;
       final filePath = file.path!;
       final ext = p.extension(filePath).toLowerCase();
@@ -528,15 +417,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         );
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File imported successfully')),
+          StashToast.show(
+            context,
+            message: '"$title" imported',
+            icon: Icons.check,
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e')),
+        StashToast.show(
+          context,
+          message: 'Import failed: $e',
+          icon: Icons.error_outline,
         );
       }
     }
@@ -547,14 +440,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final epubService = EpubService();
       final result = await epubService.parseEpub(filePath);
       if (result == null) throw Exception('Failed to parse EPUB');
-
+      if (!context.mounted) return;
       final db = context.read<DatabaseService>();
 
       final existing = await db.findLocalBook(result.book.title, result.book.author);
       if (existing != null) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Already in library')),
+          StashToast.show(
+            context,
+            message: '"${result.book.title}" is already in your library',
+            icon: Icons.info_outline,
           );
           _openReader(context, existing.id);
         }
@@ -569,85 +464,67 @@ class _LibraryScreenState extends State<LibraryScreen> {
       }
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('"${result.book.title}" imported (${result.chapters.length} chapters)')),
+        StashToast.show(
+          context,
+          message: '"${result.book.title}" added (${result.chapters.length} chapters)',
+          icon: Icons.check,
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('EPUB import failed: $e')),
+        StashToast.show(
+          context,
+          message: 'EPUB import failed: $e',
+          icon: Icons.error_outline,
         );
       }
     }
   }
 
   void _showAddUrlDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add URL'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'https://example.com/article',
-            labelText: 'URL',
-          ),
-          keyboardType: TextInputType.url,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _fetchWebContent(context, controller.text.trim());
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
-            child: const Text('Fetch'),
-          ),
-        ],
-      ),
+    UrlImportDialog.show(
+      context,
+      onSubmit: (url) => _fetchWebContent(context, url),
     );
   }
 
   Future<void> _fetchWebContent(BuildContext context, String url) async {
     if (url.isEmpty) return;
+    if (!context.mounted) return;
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fetching content...')),
+      StashToast.show(
+        context,
+        message: 'Fetching content…',
+        icon: Icons.cloud_download_outlined,
+        duration: const Duration(seconds: 3),
       );
 
       final scraper = WebScraperService();
       final result = await scraper.fetchContent(url);
+      if (!context.mounted) return;
       final db = context.read<DatabaseService>();
 
       final cache = CacheService(db.db);
       final cached = await cache.getCached(url);
       if (cached != null) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Loaded from cache')),
+          final provider = context.read<LibraryProvider>();
+          final book = Book(
+            id: 0,
+            title: cached.title,
+            source: 'web',
+            sourceUrl: url,
+            totalChapters: 1,
           );
-        }
-        final provider = context.read<LibraryProvider>();
-        final book = Book(
-          id: 0,
-          title: cached.title,
-          source: 'web',
-          sourceUrl: url,
-          totalChapters: 1,
-        );
-        final bookId = await provider.addBook(book);
-        await db.insertChapter(cached.copyWith(bookId: bookId));
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('"${cached.title}" added from cache')),
-          );
+          final bookId = await provider.addBook(book);
+          await db.insertChapter(cached.copyWith(bookId: bookId));
+          if (context.mounted) {
+            StashToast.show(
+              context,
+              message: 'Loaded from cache',
+              icon: Icons.check,
+            );
+          }
         }
         return;
       }
@@ -675,61 +552,71 @@ class _LibraryScreenState extends State<LibraryScreen> {
       await cache.cacheContent(url, result.title, result.contentHtml);
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('"${result.title}" added to library')),
+        StashToast.show(
+          context,
+          message: '"${result.title}" added',
+          icon: Icons.check,
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch content: $e')),
+        StashToast.show(
+          context,
+          message: 'Failed to fetch: $e',
+          icon: Icons.error_outline,
         );
       }
     }
   }
 
   void _showAddNoteDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Note'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: contentController,
-              decoration: const InputDecoration(labelText: 'Content'),
-              maxLines: 4,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+    final titleCtrl = TextEditingController();
+    final contentCtrl = TextEditingController();
+    StashDialog.show<void>(
+      context,
+      title: 'New note',
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: titleCtrl,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Title'),
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _createNote(context, titleController.text.trim(), contentController.text.trim());
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
-            child: const Text('Save'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: contentCtrl,
+            maxLines: 5,
+            decoration: const InputDecoration(labelText: 'Content'),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'Cancel',
+            style: TextStyle(color: context.colors.textSecondary),
+          ),
+        ),
+        PremiumButton(
+          label: 'Save',
+          size: PremiumButtonSize.sm,
+          onPressed: () {
+            final t = titleCtrl.text.trim();
+            final c = contentCtrl.text.trim();
+            if (t.isEmpty || c.isEmpty) return;
+            Navigator.pop(context);
+            _createNote(context, t, c);
+          },
+        ),
+      ],
     );
   }
 
   Future<void> _createNote(BuildContext context, String title, String content) async {
     if (title.isEmpty || content.isEmpty) return;
+    if (!context.mounted) return;
     try {
       final snippetsProvider = context.read<SnippetsProvider>();
       await snippetsProvider.createSnippet(
@@ -738,14 +625,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
         tags: ['note'],
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Note created')),
+        StashToast.show(
+          context,
+          message: 'Note created',
+          icon: Icons.check,
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create note: $e')),
+        StashToast.show(
+          context,
+          message: 'Failed to create note: $e',
+          icon: Icons.error_outline,
         );
       }
     }
@@ -760,3 +651,5 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 }
+
+

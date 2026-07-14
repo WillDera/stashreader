@@ -7,6 +7,14 @@ import '../../core/models/snippet.dart';
 import '../../core/services/database_service.dart';
 import '../../core/services/search_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/tokens/app_spacing.dart';
+import '../../widgets/animated_press.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/library_header.dart';
+import '../../widgets/loading_skeleton.dart';
+import '../../widgets/search_result_row.dart';
+import '../../widgets/text_field.dart';
+import '../../widgets/toast.dart';
 import '../reader/reader_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -23,6 +31,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<SearchResult> _results = [];
   List<String> _recentSearches = [];
   bool _searching = false;
+  String _query = '';
 
   @override
   void initState() {
@@ -43,6 +52,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _loadRecentSearches() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _recentSearches = prefs.getStringList('recent_searches') ?? [];
     });
@@ -55,16 +65,17 @@ class _SearchScreenState extends State<SearchScreen> {
     searches.insert(0, query);
     if (searches.length > 10) searches.removeLast();
     await prefs.setStringList('recent_searches', searches);
-    setState(() => _recentSearches = searches);
+    if (mounted) setState(() => _recentSearches = searches);
   }
 
   void _clearRecentSearches() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('recent_searches');
-    setState(() => _recentSearches = []);
+    if (mounted) setState(() => _recentSearches = []);
   }
 
   Future<void> _search(String query) async {
+    setState(() => _query = query);
     if (query.trim().isEmpty) {
       setState(() => _results = []);
       return;
@@ -72,171 +83,151 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _searching = true);
     try {
       final results = await _searchService!.searchAll(query.trim());
+      if (!mounted) return;
       setState(() => _results = results);
       _saveSearch(query.trim());
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Search failed: $e')),
+        StashToast.show(
+          context,
+          message: 'Search failed: $e',
+          icon: Icons.error_outline,
         );
       }
     } finally {
-      setState(() => _searching = false);
+      if (mounted) setState(() => _searching = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Custom search header — no AppBar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _focusNode,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: 'Search books, snippets...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(
-                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                        ),
-                      ),
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: _search,
-                      onChanged: (v) {
-                        if (v.isEmpty) setState(() => _results = []);
-                      },
-                    ),
-                  ),
-                  if (_searchController.text.isNotEmpty)
-                    GestureDetector(
-                      onTap: () {
-                        _searchController.clear();
-                        setState(() => _results = []);
-                        _focusNode.requestFocus();
-                      },
-                      child: const Icon(Icons.clear, size: 20),
-                    ),
-                ],
-              ),
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LibraryHeader(
+            title: 'Search',
+            titleSize: 32,
+            subtitle: 'Across your library, chapters, and snippets',
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: StashTextField(
+              controller: _searchController,
+              focusNode: _focusNode,
+              hint: 'Find anything…',
+              leadingIcon: Icons.search,
+              showClearButton: true,
+              onChanged: _search,
             ),
-            const SizedBox(height: 4),
-            // Content
-            Expanded(child: _buildBody(context, isDark)),
-          ],
-        ),
+          ),
+          Expanded(child: _buildBody(context)),
+        ],
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, bool isDark) {
+  Widget _buildBody(BuildContext context) {
     if (_searching) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_searchController.text.isEmpty && _results.isEmpty) {
-      if (_recentSearches.isEmpty) {
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.search, size: 64, color: AppTheme.accent.withValues(alpha: 0.4)),
-              const SizedBox(height: 16),
-              Text(
-                'Search your library',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Find books, chapters, and snippets',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                    ),
-              ),
-            ],
-          ),
-        );
-      }
-      return _buildRecentSearches(context, isDark);
-    }
-
-    if (_results.isEmpty && _searchController.text.isNotEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off, size: 48, color: AppTheme.accent.withValues(alpha: 0.4)),
-            const SizedBox(height: 12),
-            Text('No results for "${_searchController.text}"'),
-          ],
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        itemCount: 5,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (_, _) => const Skeleton(
+          height: 64,
+          borderRadius: BorderRadius.all(Radius.circular(18)),
         ),
       );
     }
-
+    if (_query.isEmpty) return _buildIdle(context);
+    if (_results.isEmpty) {
+      return EmptyState(
+        icon: Icons.search_off,
+        title: 'No results',
+        subtitle: 'Nothing matched "$_query". Try a different keyword.',
+      );
+    }
     return _buildResults(context);
   }
 
-  Widget _buildRecentSearches(BuildContext context, bool isDark) {
-    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildIdle(BuildContext context) {
+    final c = context.colors;
+    if (_recentSearches.isEmpty) {
+      return EmptyState(
+        icon: Icons.search,
+        title: 'Search your library',
+        subtitle:
+            'Type a title, author, phrase, or tag. Results stream as you type.',
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Recent Searches', style: Theme.of(context).textTheme.titleMedium),
-              TextButton(
-                onPressed: _clearRecentSearches,
-                child: const Text('Clear'),
+        Row(
+          children: [
+            Text(
+              'Recent searches',
+              style: TextStyle(
+                color: c.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
+            ),
+            const Spacer(),
+            AnimatedPress(
+              onTap: _clearRecentSearches,
+              child: Text(
+                'Clear',
+                style: TextStyle(
+                  color: c.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _recentSearches.length,
-            itemBuilder: (context, index) {
-              final q = _recentSearches[index];
-              return GestureDetector(
-                onTap: () {
-                  _searchController.text = q;
-                  _search(q);
-                },
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: borderColor, width: 0.5),
+        const SizedBox(height: 12),
+        for (final q in _recentSearches) ...[
+          AnimatedPress(
+            onTap: () {
+              _searchController.text = q;
+              _search(q);
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: AppSpacing.brLg,
+                border: Border.all(color: c.border, width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.history, size: 18, color: c.textTertiary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      q,
+                      style: TextStyle(
+                        color: c.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.history, size: 20, color: AppTheme.accent.withValues(alpha: 0.6)),
-                      const SizedBox(width: 12),
-                      Text(q),
-                    ],
+                  Icon(
+                    Icons.north_west,
+                    size: 16,
+                    color: c.textTertiary,
                   ),
-                ),
-              );
-            },
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -247,155 +238,109 @@ class _SearchScreenState extends State<SearchScreen> {
     final snippets = _results.where((r) => r.type == 'snippet').toList();
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 40),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
       children: [
         if (books.isNotEmpty) ...[
-          _sectionHeader(context, 'Books', books.length),
-          ...books.map((r) => _buildBookResult(context, r)),
+          _sectionHeader('Books', books.length),
+          const SizedBox(height: 8),
+          ...books.map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _bookResult(r),
+              )),
         ],
         if (chapters.isNotEmpty) ...[
-          _sectionHeader(context, 'Chapters', chapters.length),
-          ...chapters.map((r) => _buildChapterResult(context, r)),
+          const SizedBox(height: 16),
+          _sectionHeader('Chapters', chapters.length),
+          const SizedBox(height: 8),
+          ...chapters.map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _chapterResult(r),
+              )),
         ],
         if (snippets.isNotEmpty) ...[
-          _sectionHeader(context, 'Snippets', snippets.length),
-          ...snippets.map((r) => _buildSnippetResult(context, r)),
+          const SizedBox(height: 16),
+          _sectionHeader('Snippets', snippets.length),
+          const SizedBox(height: 8),
+          ...snippets.map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _snippetResult(r),
+              )),
         ],
       ],
     );
   }
 
-  Widget _sectionHeader(BuildContext context, String title, int count) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(
-        '$title ($count)',
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: AppTheme.accent,
+  Widget _sectionHeader(String title, int count) {
+    final c = context.colors;
+    return Row(
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: c.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: c.surfaceMuted,
+            borderRadius: AppSpacing.brPill,
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(
+              color: c.textSecondary,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
-      ),
-    );
-  }
-
-  // ponytail: custom result rows, no ListTile
-  Widget _buildBookResult(BuildContext context, SearchResult result) {
-    final book = result.item as Book;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => ReaderScreen(bookId: book.id)),
-        );
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.menu_book, color: AppTheme.accent, size: 24),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(book.title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
-                  if (book.author != null) ...[
-                    const SizedBox(height: 2),
-                    Text(book.author!, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ],
-              ),
-            ),
-            Text('${(book.progress * 100).toInt()}%', style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChapterResult(BuildContext context, SearchResult result) {
-    final chapter = result.item as ch_model.Chapter;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => ReaderScreen(bookId: chapter.bookId)),
-        );
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.article, color: AppTheme.accent, size: 24),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(chapter.title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(
-                    result.matchPreview,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSnippetResult(BuildContext context, SearchResult result) {
-    final snippet = result.item as Snippet;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.bookmark, color: AppTheme.accent, size: 24),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  snippet.text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                if (snippet.sourceTitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(snippet.sourceTitle!, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ],
-            ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _bookResult(SearchResult r) {
+    final book = r.item as Book;
+    return SearchResultRow(
+      variant: SearchResultRowVariant.book,
+      icon: Icons.menu_book,
+      title: book.title,
+      subtitle: book.author,
+      progress: book.progress,
+      onTap: () => _openReader(book.id),
+    );
+  }
+
+  Widget _chapterResult(SearchResult r) {
+    final chapter = r.item as ch_model.Chapter;
+    return SearchResultRow(
+      variant: SearchResultRowVariant.chapter,
+      icon: Icons.article_outlined,
+      title: chapter.title,
+      subtitle: r.matchPreview,
+      onTap: () => _openReader(chapter.bookId),
+    );
+  }
+
+  Widget _snippetResult(SearchResult r) {
+    final snippet = r.item as Snippet;
+    return SearchResultRow(
+      variant: SearchResultRowVariant.snippet,
+      icon: Icons.format_quote,
+      title: snippet.text,
+      subtitle: snippet.sourceTitle,
+      onTap: () => _openReader(snippet.bookId ?? 0),
+    );
+  }
+
+  void _openReader(int bookId) {
+    if (bookId == 0) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ReaderScreen(bookId: bookId)),
     );
   }
 }

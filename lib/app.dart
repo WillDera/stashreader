@@ -4,8 +4,9 @@ import 'features/library/library_screen.dart';
 import 'features/search/search_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/snippets/snippets_screen.dart';
-import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
+import 'theme/tokens/app_motion.dart';
+import 'widgets/glass_pill_nav.dart';
 
 class StashReaderApp extends StatelessWidget {
   const StashReaderApp({super.key});
@@ -19,7 +20,8 @@ class StashReaderApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: themeProv.isSepia ? themeProv.sepiaTheme : themeProv.lightTheme,
       darkTheme: themeProv.darkTheme,
-      themeMode: themeProv.isSepia ? ThemeMode.light : themeProv.themeMode,
+      themeMode:
+          themeProv.isSepia ? ThemeMode.light : themeProv.themeMode,
       home: const MainShell(),
     );
   }
@@ -35,86 +37,77 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
-  final _screens = const [
+  final List<Widget> _screens = const [
     LibraryScreen(),
     SnippetsScreen(),
     SearchScreen(),
     SettingsScreen(),
   ];
 
-  static const _icons = [
-    Icons.menu_book,
-    Icons.bookmark,
-    Icons.search,
-    Icons.settings,
+  static const _navItems = [
+    NavItem(
+      icon: Icons.menu_book_outlined,
+      activeIcon: Icons.menu_book,
+      label: 'Library',
+    ),
+    NavItem(
+      icon: Icons.bookmark_outline,
+      activeIcon: Icons.bookmark,
+      label: 'Snippets',
+    ),
+    NavItem(
+      icon: Icons.search,
+      activeIcon: Icons.search,
+      label: 'Search',
+    ),
+    NavItem(
+      icon: Icons.tune,
+      activeIcon: Icons.tune,
+      label: 'Settings',
+    ),
   ];
-  static const _labels = ['Library', 'Snippets', 'Search', 'Settings'];
+
+  void _onTap(int i) {
+    if (i == _currentIndex) return;
+    setState(() => _currentIndex = i);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isSepia = context.watch<ThemeProvider>().isSepia;
-    final bgColor = isSepia
-        ? AppTheme.sepiaBackground
-        : (isDark ? AppTheme.darkBackground : AppTheme.lightBackground);
-    final pillBg = isSepia
-        ? AppTheme.sepiaSurface
-        : (isDark ? const Color(0xFF2A2928) : const Color(0xFFF0ECE4));
-    final activeColor = isSepia ? AppTheme.sepiaAccent : AppTheme.accent;
-    final inactiveColor = isSepia
-        ? AppTheme.sepiaTextSecondary
-        : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary);
-
+    final themeProv = context.watch<ThemeProvider>();
     return Scaffold(
-      backgroundColor: bgColor,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      // ponytail: floating pill nav, replace with standard BottomNavigationBar if platform feel matters more than look
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-          child: Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: pillBg,
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(4, (i) {
-                final active = _currentIndex == i;
-                return GestureDetector(
-                  onTap: () => setState(() => _currentIndex = i),
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: 64,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _icons[i],
-                          size: 22,
-                          color: active ? activeColor : inactiveColor,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _labels[i],
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                            color: active ? activeColor : inactiveColor,
-                          ),
-                        ),
-                      ],
-                    ),
+      backgroundColor: themeProv.bgColor,
+      body: Stack(
+        children: [
+          // All tab screens stay mounted in the tree at full size so their
+          // state is preserved across tab switches. Inactive tabs are
+          // hidden visually with Opacity and excluded from hit-testing
+          // with IgnorePointer. We deliberately avoid IndexedStack/Offstage
+          // here because those give off-screen children Size.zero
+          // constraints, which breaks Column + Expanded layouts (and trips
+          // a "cannot hit-test a render box with no size" assertion when
+          // any pointer event arrives while an off-screen tab contains
+          // a flex child waiting for a size).
+          for (var i = 0; i < _screens.length; i++)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: i != _currentIndex,
+                child: AnimatedOpacity(
+                  duration: AppMotion.base,
+                  opacity: i == _currentIndex ? 1 : 0,
+                  child: TickerMode(
+                    enabled: i == _currentIndex,
+                    child: _screens[i],
                   ),
-                );
-              }),
+                ),
+              ),
             ),
-          ),
-        ),
+        ],
+      ),
+      bottomNavigationBar: GlassPillNav(
+        items: _navItems,
+        currentIndex: _currentIndex,
+        onTap: _onTap,
       ),
     );
   }

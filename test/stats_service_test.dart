@@ -60,7 +60,7 @@ void main() {
   }
 
   /// SQLite stores dates as TEXT; parse them back to DateTime
-  DateTime _parseDate(dynamic raw) {
+  DateTime parseDate(dynamic raw) {
     if (raw is DateTime) return raw;
     if (raw is String) return DateTime.parse(raw);
     throw StateError('Unexpected date type: ${raw.runtimeType}');
@@ -76,7 +76,7 @@ void main() {
     if (rows.isEmpty) return null;
     return ReadingStat(
       id: rows.first.data['id'] as int,
-      date: _parseDate(rows.first.data['date']),
+      date: parseDate(rows.first.data['date']),
       readingTimeSeconds: rows.first.data['reading_time_seconds'] as int? ?? 0,
       snippetsCreated: rows.first.data['snippets_created'] as int? ?? 0,
       booksCompleted: rows.first.data['books_completed'] as int? ?? 0,
@@ -97,7 +97,7 @@ void main() {
     return rows
         .map((r) => ReadingStat(
               id: r.data['id'] as int,
-              date: _parseDate(r.data['date']),
+              date: parseDate(r.data['date']),
               readingTimeSeconds:
                   r.data['reading_time_seconds'] as int? ?? 0,
               snippetsCreated: r.data['snippets_created'] as int? ?? 0,
