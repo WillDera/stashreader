@@ -34,6 +34,8 @@ class EpubService {
           final pngBytes = img.encodePng(coverImage);
           await coverFile.writeAsBytes(pngBytes);
           coverPath = coverFile.path;
+          // Cleanup temp dir — only the file path is kept
+          await coverDir.delete();
         }
       } catch (_) {
         // cover extraction is best-effort

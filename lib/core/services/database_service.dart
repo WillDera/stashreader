@@ -175,11 +175,10 @@ class DatabaseService {
     final rows = await _db
         .customSelect('SELECT * FROM snippets ORDER BY created_at DESC')
         .get();
-    final snippets = <Snippet>[];
-    for (final r in rows) {
-      snippets.add(await _snippetFromRow(r.data));
-    }
-    return snippets;
+    if (rows.isEmpty) return [];
+    final ids = rows.map((r) => r.data['id'] as int).toList();
+    final tagMap = await _batchGetTags(ids);
+    return rows.map((r) => _snippetFromRow(r.data, tagMap[r.data['id'] as int] ?? [])).toList();
   }
 
   Future<List<Snippet>> getSnippetsForBook(int bookId) async {
@@ -188,11 +187,10 @@ class DatabaseService {
             'SELECT * FROM snippets WHERE book_id = ? ORDER BY created_at DESC',
             variables: [Variable.withInt(bookId)])
         .get();
-    final snippets = <Snippet>[];
-    for (final r in rows) {
-      snippets.add(await _snippetFromRow(r.data));
-    }
-    return snippets;
+    if (rows.isEmpty) return [];
+    final ids = rows.map((r) => r.data['id'] as int).toList();
+    final tagMap = await _batchGetTags(ids);
+    return rows.map((r) => _snippetFromRow(r.data, tagMap[r.data['id'] as int] ?? [])).toList();
   }
 
   Future<Snippet?> getSnippet(int id) async {
@@ -201,7 +199,7 @@ class DatabaseService {
             variables: [Variable.withInt(id)])
         .get();
     if (rows.isEmpty) return null;
-    return await _snippetFromRow(rows.first.data);
+    return await _snippetFromRow(rows.first.data, await _getTagsForSnippet(id));
   }
 
   Future<int> createSnippet({
@@ -316,6 +314,23 @@ class DatabaseService {
       variables: [Variable.withInt(snippetId)],
     ).get();
     return rows.map((r) => r.data['name'] as String).toList();
+  }
+
+  Future<Map<int, List<String>>> _batchGetTags(List<int> snippetIds) async {
+    if (snippetIds.isEmpty) return {};
+    final placeholders = snippetIds.map((_) => '?').join(',');
+    final rows = await _db.customSelect(
+      'SELECT st.snippet_id, t.name FROM tags t '
+      'INNER JOIN snippet_tags st ON st.tag_id = t.id '
+      'WHERE st.snippet_id IN ($placeholders) ORDER BY t.name',
+      variables: snippetIds.map((id) => Variable.withInt(id)).toList(),
+    ).get();
+    final map = <int, List<String>>{};
+    for (final r in rows) {
+      final sid = r.data['snippet_id'] as int;
+      map.putIfAbsent(sid, () => []).add(r.data['name'] as String);
+    }
+    return map;
   }
 
   // -- Reading Stats --
@@ -443,9 +458,8 @@ class DatabaseService {
     );
   }
 
-  Future<Snippet> _snippetFromRow(Map<String, dynamic> row) async {
+  Snippet _snippetFromRow(Map<String, dynamic> row, [List<String>? preloadedTags]) {
     final sid = row['id'] as int;
-    final tags = await _getTagsForSnippet(sid);
     return Snippet(
       id: sid,
       text: row['content'] as String,
@@ -455,7 +469,7 @@ class DatabaseService {
       color: row['color'] as String?,
       bookId: row['book_id'] as int?,
       chapterId: row['chapter_id'] as int?,
-      tags: tags,
+      tags: preloadedTags ?? [],
     );
   }
 

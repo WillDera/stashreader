@@ -102,9 +102,12 @@ class SearchService {
         Variable.withString(pattern),
       ],
     ).get();
+    if (rows.isEmpty) return [];
+    final ids = rows.map((r) => r.data['id'] as int).toList();
+    final tagMap = await _batchGetTags(ids);
     final results = <SearchResult>[];
     for (final r in rows) {
-      final snippet = await _snippetFromRow(r.data);
+      final snippet = _snippetFromRow(r.data, tagMap[r.data['id'] as int] ?? []);
       final preview =
           snippet.text.length > 150 ? '${snippet.text.substring(0, 150)}...' : snippet.text;
       results.add(SearchResult(
@@ -142,9 +145,8 @@ class SearchService {
     );
   }
 
-  Future<Snippet> _snippetFromRow(Map<String, dynamic> row) async {
+  Snippet _snippetFromRow(Map<String, dynamic> row, [List<String>? preloadedTags]) {
     final sid = row['id'] as int;
-    final tags = await _getTagsForSnippet(sid);
     return Snippet(
       id: sid,
       text: row['content'] as String,
@@ -154,17 +156,24 @@ class SearchService {
       color: row['color'] as String?,
       bookId: row['book_id'] as int?,
       chapterId: row['chapter_id'] as int?,
-      tags: tags,
+      tags: preloadedTags ?? [],
     );
   }
 
-  Future<List<String>> _getTagsForSnippet(int snippetId) async {
+  Future<Map<int, List<String>>> _batchGetTags(List<int> snippetIds) async {
+    if (snippetIds.isEmpty) return {};
+    final placeholders = snippetIds.map((_) => '?').join(',');
     final rows = await _db.customSelect(
-      'SELECT t.name FROM tags t '
+      'SELECT st.snippet_id, t.name FROM tags t '
       'INNER JOIN snippet_tags st ON st.tag_id = t.id '
-      'WHERE st.snippet_id = ? ORDER BY t.name',
-      variables: [Variable.withInt(snippetId)],
+      'WHERE st.snippet_id IN ($placeholders) ORDER BY t.name',
+      variables: snippetIds.map((id) => Variable.withInt(id)).toList(),
     ).get();
-    return rows.map((r) => r.data['name'] as String).toList();
+    final map = <int, List<String>>{};
+    for (final r in rows) {
+      final sid = r.data['snippet_id'] as int;
+      map.putIfAbsent(sid, () => []).add(r.data['name'] as String);
+    }
+    return map;
   }
 }

@@ -93,16 +93,13 @@ class BookCard extends StatelessWidget {
 
   Widget _buildCover(BuildContext context) {
     if (book.coverPath != null && book.coverPath!.isNotEmpty) {
-      final file = File(book.coverPath!);
-      if (file.existsSync()) {
-        return Image.file(
-          file,
-          width: coverHeight * 0.6,
-          height: coverHeight,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _placeholderCover(),
-        );
-      }
+      return Image.file(
+        File(book.coverPath!),
+        width: coverHeight * 0.6,
+        height: coverHeight,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _placeholderCover(),
+      );
     }
     return _placeholderCover();
   }

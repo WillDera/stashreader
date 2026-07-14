@@ -75,9 +75,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
               itemCount: provider.books.length,
               itemBuilder: (context, index) {
                 final book = provider.books[index];
-                return BookCard(
-                  book: book,
-                  onTap: () => _openReader(context, book.id),
+                return Dismissible(
+                  key: ValueKey(book.id),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (_) async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Remove book?'),
+                        content: Text('Delete "${book.title}" and all its chapters?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: TextButton.styleFrom(foregroundColor: Colors.red),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      context.read<LibraryProvider>().deleteBook(book.id);
+                    }
+                    return false; // always return false — we handle removal via provider
+                  },
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    color: Colors.red,
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  child: BookCard(
+                    book: book,
+                    onTap: () => _openReader(context, book.id),
+                  ),
                 );
               },
             ),
