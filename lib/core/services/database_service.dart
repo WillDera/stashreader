@@ -38,11 +38,14 @@ class DatabaseService {
     return _bookFromRow(rows.first.data);
   }
 
-  Future<Book?> findBookByPath(String filePath) async {
+  Future<Book?> findLocalBook(String title, String? author) async {
     final rows = await _db
-        .customSelect('SELECT * FROM books WHERE file_path = ?',
-            variables: [Variable.withString(filePath)])
-        .get();
+        .customSelect('SELECT * FROM books WHERE title = ? AND author = ? AND source = ?',
+            variables: [
+          Variable.withString(title),
+          Variable.withString(author ?? ''),
+          Variable.withString('local'),
+        ]).get();
     if (rows.isEmpty) return null;
     return _bookFromRow(rows.first.data);
   }
