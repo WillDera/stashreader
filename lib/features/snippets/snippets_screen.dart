@@ -22,13 +22,35 @@ class SnippetsScreen extends StatefulWidget {
 }
 
 class _SnippetsScreenState extends State<SnippetsScreen> {
+  final ScrollController _scrollCtrl = ScrollController();
+  double _scrollProgress = 0;
+
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SnippetsProvider>().loadSnippets();
     });
   }
+
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final max = _scrollCtrl.position.maxScrollExtent;
+    final p = max <= 0 ? 0.0 : (_scrollCtrl.offset / max).clamp(0.0, 1.0);
+    if ((p - _scrollProgress).abs() > 0.01) {
+      setState(() => _scrollProgress = p);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _oneHand => context.watch<ThemeProvider>().oneHandMode;
 
   @override
   Widget build(BuildContext context) {
@@ -98,11 +120,16 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
       );
     }
     return ListView(
+      controller: _scrollCtrl,
       padding: EdgeInsets.zero,
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const OneHandSpacer(),
-        const LibraryHeader(title: 'Snippets', titleSize: 32),
+        LibraryHeader(
+          title: 'Snippets',
+          titleSize: _oneHand ? 64 : 32,
+          shrinkProgress: _oneHand ? _scrollProgress : 0.0,
+        ),
         if (p.allTags.isNotEmpty)
           TagFilterBar(
             tags: p.allTags,

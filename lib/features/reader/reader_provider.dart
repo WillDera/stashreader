@@ -17,6 +17,12 @@ class ReaderProvider extends ChangeNotifier {
   bool _loading = true;
   String? _error;
 
+  /// Per-chapter scroll position. Keyed by chapter index. Populated
+  /// as the user scrolls through each chapter; restored when they
+  /// navigate back to one. Chapters never opened are absent (treated
+  /// as scroll position 0 = top of the page).
+  final Map<int, double> _chapterScrollPositions = {};
+
   Timer? _readingTimer;
   int _elapsedSeconds = 0;
 
@@ -58,9 +64,13 @@ class ReaderProvider extends ChangeNotifier {
 
   void navigateToChapter(int index) {
     if (index < 0 || index >= _chapters.length) return;
+    // Save current scroll position before leaving the chapter.
+    _chapterScrollPositions[_currentIndex] = _scrollPosition;
     _currentIndex = index;
     _currentChapter = _chapters[index];
-    _scrollPosition = 0.0;
+    // If we've never visited this chapter, drop the user at the top.
+    // Otherwise restore the saved position.
+    _scrollPosition = _chapterScrollPositions[index] ?? 0.0;
     _db.markChapterRead(_currentChapter!.id);
     _updateBookProgress();
     notifyListeners();
@@ -80,6 +90,7 @@ class ReaderProvider extends ChangeNotifier {
 
   void updateScrollPosition(double position) {
     _scrollPosition = position;
+    _chapterScrollPositions[_currentIndex] = position;
   }
 
   void _updateBookProgress() {

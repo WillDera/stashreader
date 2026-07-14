@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../theme/tokens/app_spacing.dart';
 
 /// A shimmer-style placeholder box. Use for skeletons while content loads.
 class Skeleton extends StatefulWidget {
@@ -41,23 +40,32 @@ class _SkeletonState extends State<Skeleton>
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final radius = widget.borderRadius ?? BorderRadius.circular(10);
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, _) {
-        return Container(
+        // Constrain the body first with a SizedBox so the layout has a
+        // definite size, then layer the gradient on top. We deliberately
+        // avoid Container(decoration: BoxDecoration(borderRadius: ...))
+        // because that path layers a ClipRRect that can receive
+        // unbounded vertical constraints from its parent and fail to
+        // lay out.
+        return SizedBox(
           width: widget.width,
           height: widget.height,
-          decoration: BoxDecoration(
-            borderRadius: widget.borderRadius ?? AppSpacing.brSm,
-            gradient: LinearGradient(
-              begin: Alignment(-1 + _ctrl.value * 2, 0),
-              end: Alignment(1 + _ctrl.value * 2, 0),
-              colors: [
-                c.surfaceMuted,
-                c.surface,
-                c.surfaceMuted,
-              ],
-              stops: const [0.0, 0.5, 1.0],
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              gradient: LinearGradient(
+                begin: Alignment(-1 + _ctrl.value * 2, 0),
+                end: Alignment(1 + _ctrl.value * 2, 0),
+                colors: [
+                  c.surfaceMuted,
+                  c.surface,
+                  c.surfaceMuted,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
             ),
           ),
         );

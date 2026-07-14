@@ -7,6 +7,7 @@ import '../../core/models/snippet.dart';
 import '../../core/services/database_service.dart';
 import '../../core/services/search_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/theme_provider.dart';
 import '../../theme/tokens/app_spacing.dart';
 import '../../widgets/animated_press.dart';
 import '../../widgets/empty_state.dart';
@@ -28,6 +29,8 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
+  final ScrollController _scrollCtrl = ScrollController();
+  double _scrollProgress = 0;
   SearchService? _searchService;
   List<SearchResult> _results = [];
   List<String> _recentSearches = [];
@@ -39,15 +42,27 @@ class _SearchScreenState extends State<SearchScreen> {
     super.initState();
     final db = context.read<DatabaseService>();
     _searchService = SearchService(db.db);
+    _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRecentSearches();
     });
+  }
+
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final max = _scrollCtrl.position.maxScrollExtent;
+    final p = max <= 0 ? 0.0 : (_scrollCtrl.offset / max).clamp(0.0, 1.0);
+    if ((p - _scrollProgress).abs() > 0.01) {
+      setState(() => _scrollProgress = p);
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _focusNode.dispose();
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -100,17 +115,21 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  bool get _oneHand => context.watch<ThemeProvider>().oneHandMode;
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       bottom: false,
       child: ListView(
+        controller: _scrollCtrl,
         padding: EdgeInsets.zero,
         children: [
           const OneHandSpacer(),
-          const LibraryHeader(
+          LibraryHeader(
             title: 'Search',
-            titleSize: 32,
+            titleSize: _oneHand ? 64 : 32,
+            shrinkProgress: _oneHand ? _scrollProgress : 0.0,
             subtitle: 'Across your library, chapters, and snippets',
           ),
           Padding(

@@ -16,6 +16,7 @@ import '../../widgets/reader_settings_sheet.dart';
 import '../../widgets/reader_top_bar.dart';
 import '../../widgets/text_selection_toolbar.dart';
 import '../../widgets/toast.dart';
+import '../../core/utils/text_extractor.dart';
 import 'reader_provider.dart';
 
 class ReaderScreen extends StatefulWidget {
@@ -37,6 +38,11 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _colorPickerVisible = false;
   double _lastScrollOffset = 0;
   Offset _selectionOrigin = Offset.zero;
+
+  /// Index of the chapter we're currently showing. Used to detect a
+  /// chapter change after navigation so we can jump the scroll back
+  /// to the saved (or 0) position.
+  int _lastSeenChapterIndex = -1;
 
   late final AnimationController _toolbarCtrl;
   late final AnimationController _colorCtrl;
@@ -77,6 +83,21 @@ class _ReaderScreenState extends State<ReaderScreen>
               pos.clamp(0, _scrollController.position.maxScrollExtent));
         }
       }
+    });
+  }
+
+  /// Called from the Consumer builder when the current chapter index
+  /// changes (e.g. next/prev). Drops the scroll to the position saved
+  /// for that chapter — or 0 if it has never been visited.
+  void _onChapterChanged(int newIndex) {
+    if (newIndex == _lastSeenChapterIndex) return;
+    _lastSeenChapterIndex = newIndex;
+    _lastScrollOffset = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final pos = _provider?.scrollPosition ?? 0;
+      _scrollController.jumpTo(
+          pos.clamp(0, _scrollController.position.maxScrollExtent));
     });
   }
 
@@ -169,6 +190,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     final themeProv = context.watch<ThemeProvider>();
     return Consumer<ReaderProvider>(
       builder: (context, provider, _) {
+        _onChapterChanged(provider.currentIndex);
         if (provider.loading) {
           return Scaffold(
             backgroundColor: themeProv.isSepia
@@ -255,7 +277,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                               const SizedBox(height: 28),
                               SelectableText.rich(
                                 TextSpan(
-                                  text: _stripHtml(chapter.content),
+                                  text: TextExtractor.extractFromHtml(chapter.content),
                                   style: _readingStyle(themeProv),
                                 ),
                                 textAlign: themeProv.textAlign,
@@ -263,7 +285,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                                   if (selection.isValid &&
                                       !selection.isCollapsed) {
                                     final content =
-                                        _stripHtml(chapter.content);
+                                        TextExtractor.extractFromHtml(chapter.content);
                                     if (selection.end <= content.length) {
                                       _selectedText = content.substring(
                                           selection.start, selection.end);
@@ -582,14 +604,4 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
-  String _stripHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</(?:p|div|h[1-6]|li|blockquote|tr|th|td)>',
-            caseSensitive: false), '\n\n')
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll(RegExp(r'[ \t]+'), ' ')
-        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-        .trim();
-  }
 }

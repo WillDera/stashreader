@@ -16,8 +16,40 @@ import '../../widgets/segmented_control.dart';
 import '../../widgets/settings_section.dart';
 import '../../widgets/toast.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final ScrollController _scrollCtrl = ScrollController();
+  double _scrollProgress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final max = _scrollCtrl.position.maxScrollExtent;
+    final p = max <= 0 ? 0.0 : (_scrollCtrl.offset / max).clamp(0.0, 1.0);
+    if ((p - _scrollProgress).abs() > 0.01) {
+      setState(() => _scrollProgress = p);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _oneHand => context.watch<ThemeProvider>().oneHandMode;
 
   @override
   Widget build(BuildContext context) {
@@ -25,13 +57,15 @@ class SettingsScreen extends StatelessWidget {
     return SafeArea(
       bottom: false,
       child: ListView(
+        controller: _scrollCtrl,
         padding: const EdgeInsets.only(bottom: 100),
         children: [
           const OneHandSpacer(),
-          const LibraryHeader(
+          LibraryHeader(
             title: 'Settings',
-            titleSize: 32,
-            subtitle: 'Version 2.0.0',
+            titleSize: _oneHand ? 64 : 32,
+            shrinkProgress: _oneHand ? _scrollProgress : 0.0,
+            subtitle: 'Version 2.0.1',
           ),
           const SizedBox(height: 4),
           _AppearanceSection(themeProv: themeProv),
@@ -221,11 +255,14 @@ class _OneHandToggle extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Enable one-hand layout'),
-            value: themeProv.oneHandMode,
-            onChanged: themeProv.setOneHandMode,
+          Material(
+            type: MaterialType.transparency,
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Enable one-hand layout'),
+              value: themeProv.oneHandMode,
+              onChanged: themeProv.setOneHandMode,
+            ),
           ),
         ],
       ),
@@ -642,7 +679,7 @@ class _AboutSection extends StatelessWidget {
         SettingsRow(
           icon: Icons.info_outline,
           title: 'StashReader',
-          subtitle: 'Version 2.0.0 · build 2.0.0+1',
+          subtitle: 'Version 2.0.1 · build 2.0.1+2',
         ),
         SettingsRow(
           icon: Icons.favorite_outline,

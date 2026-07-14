@@ -5,6 +5,10 @@ import 'icon_button_round.dart';
 /// A page header used by Library, Snippets, Search, Settings.
 /// Title (displayMedium), optional subtitle (small, secondary), optional
 /// trailing actions, optional leading widget.
+///
+/// The screen passes [titleSize] (which should already be set to 2× the
+/// default in one-hand mode) and [shrinkProgress] (0..1) which the
+/// header multiplies the title size by to gradually shrink on scroll.
 class LibraryHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -14,6 +18,7 @@ class LibraryHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final EdgeInsets padding;
   final double titleSize;
+  final double shrinkProgress;
 
   const LibraryHeader({
     super.key,
@@ -25,11 +30,15 @@ class LibraryHeader extends StatelessWidget {
     this.onBack,
     this.padding = const EdgeInsets.fromLTRB(24, 16, 16, 12),
     this.titleSize = 32,
+    this.shrinkProgress = 0.0,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final p = shrinkProgress.clamp(0.0, 1.0);
+    final fontSize = titleSize * (1.0 - 0.5 * p);
+    final subtitleOpacity = (1.0 - p).clamp(0.0, 1.0);
     return Padding(
       padding: padding,
       child: Row(
@@ -58,7 +67,7 @@ class LibraryHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: c.textPrimary,
-                    fontSize: titleSize,
+                    fontSize: fontSize,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.5,
                     height: 1.1,
@@ -66,12 +75,15 @@ class LibraryHeader extends StatelessWidget {
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    subtitle!,
-                    style: TextStyle(
-                      color: c.textSecondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
+                  Opacity(
+                    opacity: subtitleOpacity,
+                    child: Text(
+                      subtitle!,
+                      style: TextStyle(
+                        color: c.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                   ),
                 ],

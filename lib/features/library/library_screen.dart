@@ -35,18 +35,39 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
+  final ScrollController _scrollCtrl = ScrollController();
+  double _scrollProgress = 0;
+
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<LibraryProvider>().loadBooks();
     });
   }
 
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final max = _scrollCtrl.position.maxScrollExtent;
+    final p = max <= 0 ? 0.0 : (_scrollCtrl.offset / max).clamp(0.0, 1.0);
+    if ((p - _scrollProgress).abs() > 0.01) {
+      setState(() => _scrollProgress = p);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _oneHand => context.watch<ThemeProvider>().oneHandMode;
+
   @override
   Widget build(BuildContext context) {
-    final leftHanded =
-        context.watch<ThemeProvider>().handMode == HandMode.left;
+    final leftHanded = context.watch<ThemeProvider>().handMode == HandMode.left;
     return Consumer<LibraryProvider>(
       builder: (context, provider, _) {
         return Stack(
@@ -180,6 +201,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       backgroundColor: context.colors.surface,
       onRefresh: () => provider.loadBooks(),
       child: CustomScrollView(
+        controller: _scrollCtrl,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // spacer + header scroll with the grid
@@ -258,11 +280,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       backgroundColor: context.colors.surface,
       onRefresh: () => provider.loadBooks(),
       child: ListView(
+        controller: _scrollCtrl,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           const OneHandSpacer(),
-          _header(context, provider),
+          _header(context, provider, _oneHand),
           const SizedBox(height: 8),
           for (final book in provider.books)
             Padding(
@@ -285,7 +308,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   // ── Header ──────────────────────────────────────────────────────────
 
-  Widget _header(BuildContext context, LibraryProvider provider) {
+  Widget _header(BuildContext context, LibraryProvider provider,
+      [bool oneHand = false]) {
     if (provider.selectionMode) {
       return LibraryHeader(
         title: '${provider.selectedIds.length} selected',
@@ -320,7 +344,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return LibraryHeader(
       title: 'Library',
       subtitle: subtitle,
-      titleSize: 32,
+      titleSize: _oneHand ? 64 : 32,
+      shrinkProgress: _oneHand ? _scrollProgress : 0.0,
     );
   }
 

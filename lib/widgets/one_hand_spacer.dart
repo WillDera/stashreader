@@ -15,6 +15,6 @@ class OneHandSpacer extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
     final topInset = MediaQuery.of(context).padding.top;
     final available = screenHeight - topInset;
-    return SizedBox(height: available * 0.50);
+    return SizedBox(height: available * 0.30);
   }
 }
