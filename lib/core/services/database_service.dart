@@ -52,8 +52,8 @@ class DatabaseService {
 
   Future<int> insertBook(Book book) async {
     final id = await _db.customInsert(
-      'INSERT INTO books (title, author, cover_path, source, source_url, file_path, progress, current_chapter_index, total_chapters) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO books (title, author, cover_path, source, source_url, file_path, progress, current_chapter_index, total_chapters, scroll_position) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       variables: [
         Variable.withString(book.title),
         Variable.withString(book.author ?? ''),
@@ -64,6 +64,7 @@ class DatabaseService {
         Variable.withReal(book.progress),
         Variable.withInt(book.currentChapterIndex),
         Variable.withInt(book.totalChapters),
+        Variable.withReal(book.scrollPosition),
       ],
     );
     return id;
@@ -90,12 +91,13 @@ class DatabaseService {
     );
   }
 
-  Future<void> updateProgress(int bookId, double progress, {int? currentChapterIndex}) async {
+  Future<void> updateProgress(int bookId, double progress, {int? currentChapterIndex, double scrollPosition = 0.0}) async {
     await _db.customUpdate(
-      'UPDATE books SET progress=?, current_chapter_index=?, updated_at=? WHERE id=?',
+      'UPDATE books SET progress=?, current_chapter_index=?, scroll_position=?, updated_at=? WHERE id=?',
       variables: [
         Variable.withReal(progress),
         Variable.withInt(currentChapterIndex ?? 0),
+        Variable.withReal(scrollPosition),
         Variable.withDateTime(DateTime.now()),
         Variable.withInt(bookId),
       ],
@@ -446,6 +448,7 @@ class DatabaseService {
       progress: (row['progress'] as num?)?.toDouble() ?? 0.0,
       currentChapterIndex: row['current_chapter_index'] as int? ?? 0,
       totalChapters: row['total_chapters'] as int? ?? 0,
+      scrollPosition: (row['scroll_position'] as num?)?.toDouble() ?? 0.0,
     );
   }
 

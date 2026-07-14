@@ -9,6 +9,7 @@ class Book {
   final double progress;
   final int currentChapterIndex;
   final int totalChapters;
+  final double scrollPosition;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +24,7 @@ class Book {
     this.progress = 0.0,
     this.currentChapterIndex = 0,
     this.totalChapters = 0,
+    this.scrollPosition = 0.0,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -39,6 +41,7 @@ class Book {
     double? progress,
     int? currentChapterIndex,
     int? totalChapters,
+    double? scrollPosition,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -53,6 +56,7 @@ class Book {
       progress: progress ?? this.progress,
       currentChapterIndex: currentChapterIndex ?? this.currentChapterIndex,
       totalChapters: totalChapters ?? this.totalChapters,
+      scrollPosition: scrollPosition ?? this.scrollPosition,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -69,6 +73,7 @@ class Book {
         'progress': progress,
         'current_chapter_index': currentChapterIndex,
         'total_chapters': totalChapters,
+        'scroll_position': scrollPosition,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -84,6 +89,7 @@ class Book {
         progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
         currentChapterIndex: json['current_chapter_index'] as int? ?? 0,
         totalChapters: json['total_chapters'] as int? ?? 0,
+        scrollPosition: (json['scroll_position'] as num?)?.toDouble() ?? 0.0,
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : DateTime.now(),

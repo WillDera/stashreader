@@ -43,6 +43,7 @@ class ReaderProvider extends ChangeNotifier {
       if (_book != null && _chapters.isNotEmpty) {
         _currentIndex = _book!.currentChapterIndex.clamp(0, _chapters.length - 1);
         _currentChapter = _chapters[_currentIndex];
+        _scrollPosition = _book!.scrollPosition;
         await _db.markChapterRead(_currentChapter!.id);
       }
 
@@ -87,8 +88,9 @@ class ReaderProvider extends ChangeNotifier {
     _book = _book!.copyWith(
       progress: progress,
       currentChapterIndex: _currentIndex,
+      scrollPosition: _scrollPosition,
     );
-    _db.updateProgress(_book!.id, progress, currentChapterIndex: _currentIndex);
+    _db.updateProgress(_book!.id, progress, currentChapterIndex: _currentIndex, scrollPosition: _scrollPosition);
   }
 
   void _startReadingTimer() {
@@ -107,8 +109,8 @@ class ReaderProvider extends ChangeNotifier {
     }
     // Mark book as complete if at last chapter
     if (_book != null && _currentIndex == _chapters.length - 1 && _book!.progress < 1.0) {
-      _book = _book!.copyWith(progress: 1.0);
-      _db.updateProgress(_book!.id, 1.0);
+      _book = _book!.copyWith(progress: 1.0, scrollPosition: _scrollPosition);
+      _db.updateProgress(_book!.id, 1.0, scrollPosition: _scrollPosition);
       _statsService.trackCompletion(_book!.id);
     }
     _updateBookProgress();

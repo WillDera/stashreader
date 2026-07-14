@@ -9,10 +9,10 @@ class ThemeProvider extends ChangeNotifier {
   static const _keyFontSize = 'font_size';
   static const _keyLineHeight = 'line_height';
   ThemeMode _themeMode = ThemeMode.system;
-  String _fontFamily = 'System';
+  String _fontFamily = 'Serif';
   String? _googleFont;
-  double _fontSize = 16.0;
-  double _lineHeight = 1.6;
+  double _fontSize = 18.0;
+  double _lineHeight = 1.7;
   Color _bgColor = AppTheme.lightBackground;
 
   ThemeMode get themeMode => _themeMode;
@@ -46,11 +46,11 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _themeMode = ThemeMode.values[prefs.getInt(_keyThemeMode) ?? 0];
-    _fontFamily = prefs.getString(_keyFontFamily) ?? 'System';
+    _fontFamily = prefs.getString(_keyFontFamily) ?? 'Serif';
     final fontStr = prefs.getString(_keyGoogleFont);
     _googleFont = fontStr?.isNotEmpty == true ? fontStr : null;
-    _fontSize = prefs.getDouble(_keyFontSize) ?? 16.0;
-    _lineHeight = prefs.getDouble(_keyLineHeight) ?? 1.6;
+    _fontSize = prefs.getDouble(_keyFontSize) ?? 18.0;
+    _lineHeight = prefs.getDouble(_keyLineHeight) ?? 1.7;
     notifyListeners();
   }
 

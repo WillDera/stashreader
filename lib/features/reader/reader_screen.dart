@@ -18,6 +18,8 @@ class ReaderScreen extends StatefulWidget {
 class _ReaderScreenState extends State<ReaderScreen> {
   final ScrollController _scrollController = ScrollController();
   String? _selectedText;
+  bool _showUI = true;
+  double _lastScrollOffset = 0;
 
   @override
   void initState() {
@@ -28,7 +30,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final pos = context.read<ReaderProvider>().scrollPosition;
         if (pos > 0 && _scrollController.hasClients) {
-          _scrollController.jumpTo(pos.clamp(0, _scrollController.position.maxScrollExtent));
+          _scrollController.jumpTo(
+              pos.clamp(0, _scrollController.position.maxScrollExtent));
         }
       });
     });
@@ -37,11 +40,55 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void dispose() {
     final provider = context.read<ReaderProvider>();
-    provider.stopReadingTimer();
+    // Save scroll position BEFORE stopping timer (which persists to DB)
     provider.updateScrollPosition(
         _scrollController.hasClients ? _scrollController.offset : 0);
+    provider.stopReadingTimer();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      final currentOffset = _scrollController.hasClients
+          ? _scrollController.offset
+          : _lastScrollOffset;
+      final diff = currentOffset - _lastScrollOffset;
+
+      if (diff > 20 && currentOffset > 50) {
+        if (_showUI) setState(() => _showUI = false);
+        _lastScrollOffset = currentOffset;
+      } else if (diff < -5 || currentOffset <= 0) {
+        if (!_showUI) setState(() => _showUI = true);
+        _lastScrollOffset = currentOffset;
+      }
+    }
+    return false;
+  }
+
+  void _handleTapUp(TapUpDetails details) {
+    final RenderBox renderBox = context.findRenderObject()! as RenderBox;
+    final localPos = renderBox.globalToLocal(details.globalPosition);
+    final screenWidth = renderBox.size.width;
+
+    final provider = context.read<ReaderProvider>();
+    if (provider.chapters.length <= 1) return;
+
+    if (localPos.dx < screenWidth / 3) {
+      provider.goToPreviousChapter();
+      setState(() {
+        _lastScrollOffset = 0;
+        _showUI = true;
+      });
+    } else if (localPos.dx > 2 * screenWidth / 3) {
+      provider.goToNextChapter();
+      setState(() {
+        _lastScrollOffset = 0;
+        _showUI = true;
+      });
+    } else {
+      setState(() => _showUI = !_showUI);
+    }
   }
 
   @override
@@ -81,140 +128,167 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
           final book = provider.book!;
           final chapter = provider.currentChapter!;
+          final isDark = themeProv.isDark;
+          final bgColor = isDark ? AppTheme.darkBackground : AppTheme.lightBackground;
+          final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+          final textColor = isDark ? AppTheme.darkText : AppTheme.lightText;
+          final textSecondaryColor =
+              isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
 
           return Scaffold(
-            backgroundColor: themeProv.isDark
-                ? AppTheme.darkBackground
-                : AppTheme.lightBackground,
-            appBar: AppBar(
-              title: Text(book.title, style: const TextStyle(fontSize: 16)),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.list_alt),
-                  tooltip: 'Chapters',
-                  onPressed: () =>
-                      _showChapterList(context, provider),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.text_fields),
-                  tooltip: 'Reader Settings',
-                  onPressed: () =>
-                      _showReaderSettings(context, themeProv),
-                ),
-              ],
-            ),
-            body: GestureDetector(
-              onHorizontalDragEnd: (details) {
-                if (details.primaryVelocity != null) {
-                  if (details.primaryVelocity! < -200) {
-                    provider.goToNextChapter();
-                  } else if (details.primaryVelocity! > 200) {
-                    provider.goToPreviousChapter();
-                  }
-                }
-              },
-              child: Column(
-                children: [
-                  // Chapter title
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                    child: Text(
-                      chapter.title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  // Progress
-                  if (provider.chapters.length > 1)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          Text(
-                            '${provider.currentIndex + 1}/${provider.chapters.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: themeProv.isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
+            backgroundColor: bgColor,
+            body: Stack(
+              children: [
+                // ---- Content layer ----
+                Column(
+                  children: [
+                    // Thin top progress bar (always visible)
+                    if (provider.chapters.length > 1)
+                      _buildTopProgressBar(provider),
+                    // Content area with tap zones
+                    Expanded(
+                      child: GestureDetector(
+                        onTapUp: _handleTapUp,
+                        child: NotificationListener<ScrollUpdateNotification>(
+                          onNotification: _onScrollNotification,
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Cleaner chapter title
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(0, 8, 0, 2),
+                                  child: Text(
+                                    chapter.title,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.normal,
+                                      color: textSecondaryColor,
+                                    ),
+                                  ),
+                                ),
+                                // Subtle divider
+                                Container(
+                                  height: 1,
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  color: isDark
+                                      ? AppTheme.darkBorder
+                                      : AppTheme.lightBorder,
+                                ),
+                                // Content text
+                                SelectableText.rich(
+                                  TextSpan(
+                                    text: _stripHtml(chapter.content),
+                                    style: TextStyle(
+                                      fontSize: themeProv.fontSize,
+                                      height: themeProv.lineHeight,
+                                      fontFamily: _resolveFont(themeProv),
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  onSelectionChanged: (selection, cause) {
+                                    if (selection.isValid &&
+                                        !selection.isCollapsed) {
+                                      final content =
+                                          _stripHtml(chapter.content);
+                                      _selectedText = content.substring(
+                                          selection.start, selection.end);
+                                    } else {
+                                      _selectedText = null;
+                                    }
+                                  },
+                                  contextMenuBuilder:
+                                      (context, editableTextState) {
+                                    final items =
+                                        List<ContextMenuButtonItem>.from(
+                                            editableTextState
+                                                .contextMenuButtonItems);
+                                    if (_selectedText != null &&
+                                        _selectedText!.trim().isNotEmpty) {
+                                      items.add(ContextMenuButtonItem(
+                                        onPressed: () {
+                                          _createSnippet(context,
+                                              _selectedText!, provider);
+                                        },
+                                        label: 'Create Snippet',
+                                      ));
+                                    }
+                                    return AdaptiveTextSelectionToolbar
+                                        .buttonItems(
+                                      buttonItems: items,
+                                      anchors:
+                                          editableTextState.contextMenuAnchors,
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(2),
-                              child: LinearProgressIndicator(
-                                value: (provider.currentIndex + 1) /
-                                    provider.chapters.length,
-                                minHeight: 3,
-                                backgroundColor: themeProv.isDark
-                                    ? AppTheme.darkBorder
-                                    : AppTheme.lightBorder,
-                                valueColor:
-                                    const AlwaysStoppedAnimation<Color>(
-                                        AppTheme.accent),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  // Content
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
-                      child: SelectableText.rich(
-                        TextSpan(
-                          text: _stripHtml(chapter.content),
-                          style: TextStyle(
-                            fontSize: themeProv.fontSize,
-                            height: themeProv.lineHeight,
-                            fontFamily: _resolveFont(themeProv),
-                            color: themeProv.isDark
-                                ? AppTheme.darkText
-                                : AppTheme.lightText,
                           ),
                         ),
-                        onSelectionChanged: (selection, cause) {
-                          if (selection.isValid &&
-                              !selection.isCollapsed) {
-                            final content = _stripHtml(chapter.content);
-                            _selectedText =
-                                content.substring(selection.start, selection.end);
-                          } else {
-                            _selectedText = null;
-                          }
-                        },
-                        contextMenuBuilder: (context, editableTextState) {
-                          final items =
-                              List<ContextMenuButtonItem>.from(
-                                  editableTextState.contextMenuButtonItems);
-                          if (_selectedText != null &&
-                              _selectedText!.trim().isNotEmpty) {
-                            items.add(ContextMenuButtonItem(
+                      ),
+                    ),
+                  ],
+                ),
+
+                // ---- Animated AppBar overlay ----
+                AnimatedPositioned(
+                  top: _showUI
+                      ? (provider.chapters.length > 1 ? 2.0 : 0.0)
+                      : -kToolbarHeight,
+                  left: 0,
+                  right: 0,
+                  duration: const Duration(milliseconds: 250),
+                  child: Material(
+                    elevation: 1,
+                    color: surfaceColor,
+                    child: SafeArea(
+                      bottom: false,
+                      child: SizedBox(
+                        height: kToolbarHeight,
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back),
                               onPressed: () {
-                                _createSnippet(
-                                    context, _selectedText!, provider);
+                                context
+                                    .read<ReaderProvider>()
+                                    .stopReadingTimer();
+                                Navigator.pop(context);
                               },
-                              label: 'Create Snippet',
-                            ));
-                          }
-                          return AdaptiveTextSelectionToolbar.buttonItems(
-                            buttonItems: items,
-                            anchors: editableTextState.contextMenuAnchors,
-                          );
-                        },
+                            ),
+                            Expanded(
+                              child: Text(
+                                book.title,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.text_fields),
+                              tooltip: 'Reader Settings',
+                              onPressed: () => _showReaderSettings(
+                                  context, themeProv),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  // Bottom nav for chapters
-                  if (provider.chapters.length > 1)
-                    _buildBottomNav(themeProv, provider),
-                ],
-              ),
+                ),
+
+                // ---- Animated Bottom Nav overlay ----
+                if (provider.chapters.length > 1)
+                  AnimatedPositioned(
+                    bottom: _showUI ? 0 : -56.0,
+                    left: 0,
+                    right: 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: _buildBottomNav(themeProv, provider),
+                  ),
+              ],
             ),
           );
         },
@@ -222,40 +296,52 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  Widget _buildBottomNav(ThemeProvider themeProv, ReaderProvider provider) {
+  Widget _buildTopProgressBar(ReaderProvider provider) {
+    final fraction = (provider.currentIndex + 1) / provider.chapters.length;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      decoration: BoxDecoration(
-        color:
-            themeProv.isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-        border: Border(
-          top: BorderSide(
-            color: themeProv.isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
-          ),
-        ),
+      height: 2,
+      color: AppTheme.accent.withValues(alpha: 0.2),
+      child: FractionallySizedBox(
+        alignment: Alignment.centerLeft,
+        widthFactor: fraction.clamp(0.0, 1.0),
+        child: Container(color: AppTheme.accent),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          TextButton.icon(
-            onPressed: provider.currentIndex > 0
-                ? () => provider.goToPreviousChapter()
-                : null,
-            icon: const Icon(Icons.chevron_left),
-            label: const Text('Previous'),
-          ),
-          Text(
-            '${provider.currentIndex + 1} / ${provider.chapters.length}',
-            style: const TextStyle(fontSize: 12),
-          ),
-          TextButton.icon(
-            onPressed: provider.currentIndex < provider.chapters.length - 1
-                ? () => provider.goToNextChapter()
-                : null,
-            icon: const Icon(Icons.chevron_right),
-            label: const Text('Next'),
-          ),
-        ],
+    );
+  }
+
+  Widget _buildBottomNav(ThemeProvider themeProv, ReaderProvider provider) {
+    final isDark = themeProv.isDark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface)
+            .withValues(alpha: 0.92),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton.icon(
+              onPressed: () => _showChapterList(context, provider),
+              icon: const Icon(Icons.list_alt, size: 18),
+              label: const Text('Chapters', style: TextStyle(fontSize: 13)),
+            ),
+            TextButton.icon(
+              onPressed: provider.currentIndex < provider.chapters.length - 1
+                  ? () {
+                      provider.goToNextChapter();
+                      setState(() {
+                        _lastScrollOffset = 0;
+                        _showUI = true;
+                      });
+                    }
+                  : null,
+              icon: const Icon(Icons.chevron_right),
+              label: const Text('Next', style: TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -272,8 +358,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Chapters',
-                  style: Theme.of(ctx).textTheme.titleLarge),
+              child:
+                  Text('Chapters', style: Theme.of(ctx).textTheme.titleLarge),
             ),
             const Divider(height: 0),
             Flexible(
@@ -308,6 +394,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     onTap: () {
                       Navigator.pop(ctx);
                       provider.navigateToChapter(i);
+                      setState(() {
+                        _lastScrollOffset = 0;
+                        _showUI = true;
+                      });
                     },
                   );
                 },
@@ -326,8 +416,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) =>
-          ReaderSettingsPanel(themeProvider: themeProv),
+      builder: (ctx) => ReaderSettingsPanel(themeProvider: themeProv),
     );
   }
 
@@ -372,7 +461,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _saveSnippet(context, text, noteController.text.trim(), provider);
+              _saveSnippet(
+                  context, text, noteController.text.trim(), provider);
             },
             style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
             child: const Text('Save'),

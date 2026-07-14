@@ -21,6 +21,10 @@ class AppDatabase extends GeneratedDatabase {
       },
       beforeOpen: (details) async {
         await _createTables();
+        // Migration: add scroll_position column if missing (idempotent)
+        try {
+          await customStatement('ALTER TABLE books ADD COLUMN scroll_position REAL NOT NULL DEFAULT 0.0');
+        } catch (_) {}
       },
     );
   }
@@ -40,6 +44,7 @@ class AppDatabase extends GeneratedDatabase {
         progress REAL NOT NULL DEFAULT 0.0,
         current_chapter_index INTEGER NOT NULL DEFAULT 0,
         total_chapters INTEGER NOT NULL DEFAULT 0,
+        scroll_position REAL NOT NULL DEFAULT 0.0,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
