@@ -38,6 +38,15 @@ class DatabaseService {
     return _bookFromRow(rows.first.data);
   }
 
+  Future<Book?> findBookByPath(String filePath) async {
+    final rows = await _db
+        .customSelect('SELECT * FROM books WHERE file_path = ?',
+            variables: [Variable.withString(filePath)])
+        .get();
+    if (rows.isEmpty) return null;
+    return _bookFromRow(rows.first.data);
+  }
+
   Future<int> insertBook(Book book) async {
     final id = await _db.customInsert(
       'INSERT INTO books (title, author, cover_path, source, source_url, file_path, progress, current_chapter_index, total_chapters) '
@@ -422,13 +431,15 @@ class DatabaseService {
   }
 
   Chapter _chapterFromRow(Map<String, dynamic> row) {
+    final readAtRaw = row['read_at'];
+    final readAt = readAtRaw is String ? DateTime.tryParse(readAtRaw) : readAtRaw as DateTime?;
     return Chapter(
       id: row['id'] as int,
       bookId: row['book_id'] as int,
       title: row['title'] as String,
       content: row['content'] as String,
       index: row['index'] as int,
-      readAt: row['read_at'] as DateTime?,
+      readAt: readAt,
     );
   }
 
@@ -449,9 +460,11 @@ class DatabaseService {
   }
 
   ReadingStat _statFromRow(Map<String, dynamic> row) {
+    final dateRaw = row['date'];
+    final date = dateRaw is String ? DateTime.parse(dateRaw) : dateRaw as DateTime;
     return ReadingStat(
       id: row['id'] as int,
-      date: row['date'] as DateTime,
+      date: date,
       readingTimeSeconds: row['reading_time_seconds'] as int? ?? 0,
       snippetsCreated: row['snippets_created'] as int? ?? 0,
       booksCompleted: row['books_completed'] as int? ?? 0,

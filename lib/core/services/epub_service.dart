@@ -70,11 +70,16 @@ class EpubService {
     int idx = startIndex;
     for (final ec in epubChapters) {
       final chTitle = ec.Title ?? 'Chapter ${idx + 1}';
+      String content = ec.HtmlContent ?? '';
+      // Strip CSS/style blocks that leak from EPUB stylesheets
+      content = content.replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true, caseSensitive: false), '');
+      // Strip @page rules and other CSS that appears as text
+      content = content.replaceAll(RegExp(r'@[a-z]+\s*\{[^}]*\}', dotAll: true, caseSensitive: false), '');
       output.add(Chapter(
         id: 0,
         bookId: bookId,
         title: chTitle,
-        content: ec.HtmlContent ?? '',
+        content: content,
         index: idx++,
       ));
       // Process subchapters

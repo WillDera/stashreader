@@ -234,12 +234,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _importEpub(BuildContext context, String filePath) async {
     try {
+      final db = context.read<DatabaseService>();
+
+      final existing = await db.findBookByPath(filePath);
+      if (existing != null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Already in library')),
+          );
+          _openReader(context, existing.id);
+        }
+        return;
+      }
+
       final epubService = EpubService();
       final result = await epubService.parseEpub(filePath);
       if (result == null) throw Exception('Failed to parse EPUB');
 
       final provider = context.read<LibraryProvider>();
-      final db = context.read<DatabaseService>();
 
       final bookId = await provider.addBook(result.book);
       for (final ch in result.chapters) {

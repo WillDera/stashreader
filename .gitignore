@@ -46,3 +46,4 @@ app.*.map.json
 PRD.md
 AGENTS.md
 .opencode/
+graphify-out/
