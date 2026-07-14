@@ -27,9 +27,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("stashreader") {
+            storeFile = file("stashreader-debug.keystore")
+            storePassword = "stashreader"
+            keyAlias = "stashreader"
+            keyPassword = "stashreader"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("stashreader")
+        }
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("stashreader")
         }
     }
 }
