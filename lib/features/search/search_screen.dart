@@ -90,37 +90,52 @@ class _SearchScreenState extends State<SearchScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: TextField(
-          controller: _searchController,
-          focusNode: _focusNode,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: 'Search books, snippets...',
-            border: InputBorder.none,
-            hintStyle: TextStyle(
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Custom search header — no AppBar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _focusNode,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Search books, snippets...',
+                        border: InputBorder.none,
+                        hintStyle: TextStyle(
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        ),
+                      ),
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: _search,
+                      onChanged: (v) {
+                        if (v.isEmpty) setState(() => _results = []);
+                      },
+                    ),
+                  ),
+                  if (_searchController.text.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        setState(() => _results = []);
+                        _focusNode.requestFocus();
+                      },
+                      child: const Icon(Icons.clear, size: 20),
+                    ),
+                ],
+              ),
             ),
-          ),
-          textInputAction: TextInputAction.search,
-          onSubmitted: _search,
-          onChanged: (v) {
-            if (v.isEmpty) setState(() => _results = []);
-          },
+            const SizedBox(height: 4),
+            // Content
+            Expanded(child: _buildBody(context, isDark)),
+          ],
         ),
-        actions: [
-          if (_searchController.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.clear),
-              onPressed: () {
-                _searchController.clear();
-                setState(() => _results = []);
-                _focusNode.requestFocus();
-              },
-            ),
-        ],
       ),
-      body: _buildBody(context, isDark),
     );
   }
 
@@ -174,6 +189,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildRecentSearches(BuildContext context, bool isDark) {
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -195,13 +212,27 @@ class _SearchScreenState extends State<SearchScreen> {
             itemCount: _recentSearches.length,
             itemBuilder: (context, index) {
               final q = _recentSearches[index];
-              return ListTile(
-                leading: const Icon(Icons.history, size: 20),
-                title: Text(q),
+              return GestureDetector(
                 onTap: () {
                   _searchController.text = q;
                   _search(q);
                 },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: borderColor, width: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history, size: 20, color: AppTheme.accent.withValues(alpha: 0.6)),
+                      const SizedBox(width: 12),
+                      Text(q),
+                    ],
+                  ),
+                ),
               );
             },
           ),
@@ -211,7 +242,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildResults(BuildContext context) {
-    // Group results by type
     final books = _results.where((r) => r.type == 'book').toList();
     final chapters = _results.where((r) => r.type == 'chapter').toList();
     final snippets = _results.where((r) => r.type == 'snippet').toList();
@@ -248,52 +278,124 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  // ponytail: custom result rows, no ListTile
   Widget _buildBookResult(BuildContext context, SearchResult result) {
     final book = result.item as Book;
-    return ListTile(
-      leading: const Icon(Icons.menu_book, color: AppTheme.accent),
-      title: Text(book.title),
-      subtitle: book.author != null ? Text(book.author!) : null,
-      trailing: Text('${(book.progress * 100).toInt()}%'),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+
+    return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => ReaderScreen(bookId: book.id)),
         );
       },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.menu_book, color: AppTheme.accent, size: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(book.title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+                  if (book.author != null) ...[
+                    const SizedBox(height: 2),
+                    Text(book.author!, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ],
+              ),
+            ),
+            Text('${(book.progress * 100).toInt()}%', style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildChapterResult(BuildContext context, SearchResult result) {
     final chapter = result.item as ch_model.Chapter;
-    return ListTile(
-      leading: const Icon(Icons.article, color: AppTheme.accent),
-      title: Text(chapter.title),
-      subtitle: Text(
-        result.matchPreview,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+
+    return GestureDetector(
       onTap: () {
-        // Navigate to book reader
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => ReaderScreen(bookId: chapter.bookId)),
         );
       },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.article, color: AppTheme.accent, size: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(chapter.title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(
+                    result.matchPreview,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildSnippetResult(BuildContext context, SearchResult result) {
     final snippet = result.item as Snippet;
-    return ListTile(
-      leading: const Icon(Icons.bookmark, color: AppTheme.accent),
-      title: Text(
-        snippet.text,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
       ),
-      subtitle: snippet.sourceTitle != null ? Text(snippet.sourceTitle!) : null,
+      child: Row(
+        children: [
+          Icon(Icons.bookmark, color: AppTheme.accent, size: 24),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  snippet.text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                if (snippet.sourceTitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(snippet.sourceTitle!, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

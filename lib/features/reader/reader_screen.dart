@@ -17,6 +17,7 @@ class ReaderScreen extends StatefulWidget {
 
 class _ReaderScreenState extends State<ReaderScreen> {
   final ScrollController _scrollController = ScrollController();
+  ReaderProvider? _provider;
   String? _selectedText;
   bool _showUI = true;
   double _lastScrollOffset = 0;
@@ -24,26 +25,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<ReaderProvider>().loadBook(widget.bookId);
-      // Restore scroll position after the chapter renders
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final pos = context.read<ReaderProvider>().scrollPosition;
-        if (pos > 0 && _scrollController.hasClients) {
+    Future.microtask(() => _loadAndRestore());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _provider ??= context.read<ReaderProvider>();
+  }
+
+  Future<void> _loadAndRestore() async {
+    await _provider!.loadBook(widget.bookId);
+    if (!mounted) return;
+    _restoreScrollPosition();
+  }
+
+  void _restoreScrollPosition() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        final pos = _provider!.scrollPosition;
+        if (pos > 0) {
           _scrollController.jumpTo(
               pos.clamp(0, _scrollController.position.maxScrollExtent));
         }
-      });
+      }
     });
   }
 
   @override
   void dispose() {
-    final provider = context.read<ReaderProvider>();
-    // Save scroll position BEFORE stopping timer (which persists to DB)
-    provider.updateScrollPosition(
-        _scrollController.hasClients ? _scrollController.offset : 0);
-    provider.stopReadingTimer();
+    _provider?.stopReadingTimer();
     _scrollController.dispose();
     super.dispose();
   }
@@ -53,6 +65,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final currentOffset = _scrollController.hasClients
           ? _scrollController.offset
           : _lastScrollOffset;
+      context.read<ReaderProvider>().updateScrollPosition(currentOffset);
       final diff = currentOffset - _lastScrollOffset;
 
       if (diff > 20 && currentOffset > 50) {
@@ -67,6 +80,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _handleTapUp(TapUpDetails details) {
+    if (!mounted) return;
     final RenderBox renderBox = context.findRenderObject()! as RenderBox;
     final localPos = renderBox.globalToLocal(details.globalPosition);
     final screenWidth = renderBox.size.width;
@@ -94,30 +108,28 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProv = context.watch<ThemeProvider>();
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) {
-          context.read<ReaderProvider>().stopReadingTimer();
-        }
-      },
-      child: Consumer<ReaderProvider>(
+    return Consumer<ReaderProvider>(
         builder: (context, provider, _) {
           if (provider.loading) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Loading...')),
+              backgroundColor: themeProv.isSepia
+                  ? AppTheme.sepiaBackground
+                  : (themeProv.isDark ? AppTheme.darkBackground : AppTheme.lightBackground),
               body: const Center(child: CircularProgressIndicator()),
             );
           }
           if (provider.error != null || provider.currentChapter == null) {
+            final bgColor = themeProv.isSepia
+                ? AppTheme.sepiaBackground
+                : (themeProv.isDark ? AppTheme.darkBackground : AppTheme.lightBackground);
             return Scaffold(
-              appBar: AppBar(title: const Text('Reader')),
+              backgroundColor: bgColor,
               body: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline,
-                        size: 48, color: AppTheme.accent),
+                    Icon(Icons.error_outline,
+                        size: 48, color: AppTheme.accent.withValues(alpha: 0.6)),
                     const SizedBox(height: 16),
                     Text(provider.error ?? 'Content not available'),
                   ],
@@ -128,149 +140,117 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
           final book = provider.book!;
           final chapter = provider.currentChapter!;
-          final isDark = themeProv.isDark;
-          final bgColor = isDark ? AppTheme.darkBackground : AppTheme.lightBackground;
-          final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-          final textColor = isDark ? AppTheme.darkText : AppTheme.lightText;
-          final textSecondaryColor =
-              isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+          final bgColor = themeProv.isSepia
+              ? AppTheme.sepiaBackground
+              : (themeProv.isDark ? AppTheme.darkBackground : AppTheme.lightBackground);
+          final textColor = themeProv.isSepia
+              ? AppTheme.sepiaText
+              : (themeProv.isDark ? AppTheme.darkText : AppTheme.lightText);
+          final textSecondaryColor = themeProv.isSepia
+              ? AppTheme.sepiaTextSecondary
+              : (themeProv.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary);
 
           return Scaffold(
             backgroundColor: bgColor,
-            body: Stack(
-              children: [
-                // ---- Content layer ----
-                Column(
-                  children: [
-                    // Thin top progress bar (always visible)
-                    if (provider.chapters.length > 1)
-                      _buildTopProgressBar(provider),
-                    // Content area with tap zones
-                    Expanded(
-                      child: GestureDetector(
-                        onTapUp: _handleTapUp,
-                        child: NotificationListener<ScrollUpdateNotification>(
-                          onNotification: _onScrollNotification,
-                          child: SingleChildScrollView(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Cleaner chapter title
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(0, 8, 0, 2),
-                                  child: Text(
-                                    chapter.title,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.normal,
-                                      color: textSecondaryColor,
-                                    ),
-                                  ),
-                                ),
-                                // Subtle divider
-                                Container(
-                                  height: 1,
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  color: isDark
-                                      ? AppTheme.darkBorder
-                                      : AppTheme.lightBorder,
-                                ),
-                                // Content text
-                                SelectableText.rich(
-                                  TextSpan(
-                                    text: _stripHtml(chapter.content),
-                                    style: TextStyle(
-                                      fontSize: themeProv.fontSize,
-                                      height: themeProv.lineHeight,
-                                      fontFamily: _resolveFont(themeProv),
-                                      color: textColor,
-                                    ),
-                                  ),
-                                  onSelectionChanged: (selection, cause) {
-                                    if (selection.isValid &&
-                                        !selection.isCollapsed) {
-                                      final content =
-                                          _stripHtml(chapter.content);
-                                      _selectedText = content.substring(
-                                          selection.start, selection.end);
-                                    } else {
-                                      _selectedText = null;
-                                    }
-                                  },
-                                  contextMenuBuilder:
-                                      (context, editableTextState) {
-                                    final items =
-                                        List<ContextMenuButtonItem>.from(
-                                            editableTextState
-                                                .contextMenuButtonItems);
-                                    if (_selectedText != null &&
-                                        _selectedText!.trim().isNotEmpty) {
-                                      items.add(ContextMenuButtonItem(
-                                        onPressed: () {
-                                          _createSnippet(context,
-                                              _selectedText!, provider);
-                                        },
-                                        label: 'Create Snippet',
-                                      ));
-                                    }
-                                    return AdaptiveTextSelectionToolbar
-                                        .buttonItems(
-                                      buttonItems: items,
-                                      anchors:
-                                          editableTextState.contextMenuAnchors,
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+            appBar: _showUI
+                ? AppBar(
+                    backgroundColor: Colors.transparent,
+                    leading: IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                  ],
-                ),
-
-                // ---- Animated AppBar overlay ----
-                AnimatedPositioned(
-                  top: _showUI
-                      ? (provider.chapters.length > 1 ? 2.0 : 0.0)
-                      : -kToolbarHeight,
-                  left: 0,
-                  right: 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: Material(
-                    elevation: 1,
-                    color: surfaceColor,
-                    child: SafeArea(
-                      bottom: false,
-                      child: SizedBox(
-                        height: kToolbarHeight,
-                        child: Row(
+                    title: Text(book.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 15, color: textSecondaryColor)),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.text_fields),
+                        tooltip: 'Reader Settings',
+                        onPressed: () =>
+                            _showReaderSettings(context, themeProv),
+                      ),
+                    ],
+                  )
+                : null,
+            body: Column(
+              children: [
+                // Thin top progress bar — single 2px line, no container
+                if (provider.chapters.length > 1)
+                  _buildTopProgressBar(provider),
+                // Content area with tap zones
+                Expanded(
+                  child: GestureDetector(
+                    onTapUp: _handleTapUp,
+                    child: NotificationListener<ScrollUpdateNotification>(
+                      onNotification: _onScrollNotification,
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back),
-                              onPressed: () {
-                                context
-                                    .read<ReaderProvider>()
-                                    .stopReadingTimer();
-                                Navigator.pop(context);
-                              },
-                            ),
-                            Expanded(
+                            // Chapter title — slightly larger, more bottom margin
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
-                                book.title,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 16),
+                                chapter.title,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w400,
+                                  fontStyle: FontStyle.italic,
+                                  color: textSecondaryColor,
+                                  letterSpacing: 0.3,
+                                ),
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.text_fields),
-                              tooltip: 'Reader Settings',
-                              onPressed: () => _showReaderSettings(
-                                  context, themeProv),
+                            // Content text
+                            SelectableText.rich(
+                              TextSpan(
+                                text: _stripHtml(chapter.content),
+                                style: TextStyle(
+                                  fontSize: themeProv.fontSize,
+                                  height: themeProv.lineHeight,
+                                  fontFamily: _resolveFont(themeProv),
+                                  color: textColor,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              onSelectionChanged: (selection, cause) {
+                                if (selection.isValid &&
+                                    !selection.isCollapsed) {
+                                  final content =
+                                      _stripHtml(chapter.content);
+                                  _selectedText = content.substring(
+                                      selection.start, selection.end);
+                                } else {
+                                  _selectedText = null;
+                                }
+                              },
+                              contextMenuBuilder:
+                                  (context, editableTextState) {
+                                final items =
+                                    List<ContextMenuButtonItem>.from(
+                                        editableTextState
+                                            .contextMenuButtonItems);
+                                if (_selectedText != null &&
+                                    _selectedText!
+                                        .trim()
+                                        .isNotEmpty) {
+                                  items.add(ContextMenuButtonItem(
+                                    onPressed: () {
+                                      _createSnippet(context,
+                                          _selectedText!, provider);
+                                    },
+                                    label: 'Create Snippet',
+                                  ));
+                                }
+                                return AdaptiveTextSelectionToolbar
+                                    .buttonItems(
+                                  buttonItems: items,
+                                  anchors: editableTextState
+                                      .contextMenuAnchors,
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -278,45 +258,39 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                   ),
                 ),
-
-                // ---- Animated Bottom Nav overlay ----
-                if (provider.chapters.length > 1)
-                  AnimatedPositioned(
-                    bottom: _showUI ? 0 : -56.0,
-                    left: 0,
-                    right: 0,
-                    duration: const Duration(milliseconds: 250),
-                    child: _buildBottomNav(themeProv, provider),
-                  ),
               ],
             ),
+            bottomNavigationBar:
+                _showUI && provider.chapters.length > 1
+                    ? _buildBottomNav(themeProv, provider)
+                    : null,
           );
         },
-      ),
     );
   }
 
+  // ponytail: single 2px line with rounded caps, no container wrapper
   Widget _buildTopProgressBar(ReaderProvider provider) {
     final fraction = (provider.currentIndex + 1) / provider.chapters.length;
-    return Container(
+    return SizedBox(
       height: 2,
-      color: AppTheme.accent.withValues(alpha: 0.2),
       child: FractionallySizedBox(
         alignment: Alignment.centerLeft,
         widthFactor: fraction.clamp(0.0, 1.0),
-        child: Container(color: AppTheme.accent),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.accent,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildBottomNav(ThemeProvider themeProv, ReaderProvider provider) {
-    final isDark = themeProv.isDark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      decoration: BoxDecoration(
-        color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface)
-            .withValues(alpha: 0.92),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      color: Colors.transparent,
       child: SafeArea(
         top: false,
         child: Row(
@@ -349,9 +323,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _showChapterList(BuildContext context, ReaderProvider provider) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -413,9 +384,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) => ReaderSettingsPanel(themeProvider: themeProv),
     );
   }
@@ -435,7 +403,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppTheme.accent.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(text,
                   maxLines: 4,
@@ -484,13 +452,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         bookId: provider.book?.id,
         chapterId: provider.currentChapter?.id,
       );
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Snippet created!')),
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to create snippet: $e')),
         );
@@ -500,8 +468,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   String _stripHtml(String html) {
     return html
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</(?:p|div|h[1-6]|li|blockquote|tr|th|td)>', caseSensitive: false), '\n\n')
         .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'[ \t]+'), ' ')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
   }
 

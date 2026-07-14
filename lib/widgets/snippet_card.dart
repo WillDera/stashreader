@@ -19,114 +19,121 @@ class SnippetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dateFormat = DateFormat('MMM d, yyyy');
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Text quote
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-              color: _parseColor(snippet.color)
-                  .withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: _parseColor(snippet.color)
-                    .withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Text(
-                  snippet.text,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontStyle: FontStyle.italic,
-                        height: 1.5,
-                      ),
-                  maxLines: 5,
-                  overflow: TextOverflow.ellipsis,
+    // ponytail: left-accent border, no Card, no shadow, no elevation
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: _parseColor(snippet.color), width: 3),
+            right: BorderSide(color: borderColor, width: 0.5),
+            top: BorderSide(color: borderColor, width: 0.5),
+            bottom: BorderSide(color: borderColor, width: 0.5),
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Text quote
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _parseColor(snippet.color).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _parseColor(snippet.color).withValues(alpha: 0.15),
                 ),
               ),
+              child: Text(
+                snippet.text,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontStyle: FontStyle.italic,
+                      height: 1.5,
+                    ),
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
 
-              // Note
-              if (snippet.note != null && snippet.note!.isNotEmpty) ...[
-                const SizedBox(height: 8),
+            // Note
+            if (snippet.note != null && snippet.note!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                snippet.note!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.lightTextSecondary,
+                      height: 1.4,
+                    ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+
+            const SizedBox(height: 10),
+
+            // Footer: source + tags + date
+            Row(
+              children: [
+                if (snippet.sourceTitle != null) ...[
+                  Icon(Icons.source, size: 14, color: AppTheme.accent.withValues(alpha: 0.7)),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      snippet.sourceTitle!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.accent,
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                if (snippet.sourceTitle != null) const Spacer(),
                 Text(
-                  snippet.note!,
+                  dateFormat.format(snippet.createdAt),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: isDark
                             ? AppTheme.darkTextSecondary
                             : AppTheme.lightTextSecondary,
                       ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
+            ),
 
+            // Tags
+            if (snippet.tags.isNotEmpty) ...[
               const SizedBox(height: 8),
-
-              // Footer: source + tags + date
-              Row(
-                children: [
-                  if (snippet.sourceTitle != null) ...[
-                    Icon(Icons.source, size: 14, color: AppTheme.accent),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        snippet.sourceTitle!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.accent,
-                            ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: snippet.tags.map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      tag,
+                      style: TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ],
-                  if (snippet.sourceTitle != null) const Spacer(),
-                  Text(
-                    dateFormat.format(snippet.createdAt),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
-                        ),
-                  ),
-                ],
+                  );
+                }).toList(),
               ),
-
-              // Tags
-              if (snippet.tags.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: snippet.tags.map((tag) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        tag,
-                        style: const TextStyle(
-                          color: AppTheme.accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
             ],
-          ),
+          ],
         ),
       ),
     );

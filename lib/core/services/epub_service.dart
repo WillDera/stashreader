@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:epubx/epubx.dart';
 import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
 
@@ -29,13 +30,15 @@ class EpubService {
       try {
         final coverImage = epubBook.CoverImage;
         if (coverImage != null) {
-          final coverDir = await Directory.systemTemp.createTemp('epub_cover');
-          final coverFile = File('${coverDir.path}/cover.png');
+          final appDir = await getApplicationDocumentsDirectory();
+          final coverDir = Directory('${appDir.path}/covers');
+          if (!await coverDir.exists()) {
+            await coverDir.create(recursive: true);
+          }
+          final coverFile = File('${coverDir.path}/${DateTime.now().millisecondsSinceEpoch}.png');
           final pngBytes = img.encodePng(coverImage);
           await coverFile.writeAsBytes(pngBytes);
           coverPath = coverFile.path;
-          // Cleanup temp dir — only the file path is kept
-          await coverDir.delete();
         }
       } catch (_) {
         // cover extraction is best-effort

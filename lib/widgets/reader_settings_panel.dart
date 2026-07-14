@@ -20,12 +20,19 @@ class _ReaderSettingsPanelState extends State<ReaderSettingsPanel> {
   Widget build(BuildContext context) {
     final themeProv = widget.themeProvider;
     final isDark = themeProv.isDark;
+    final isSepia = themeProv.isSepia;
+    final surfaceColor = isSepia
+        ? AppTheme.sepiaSurface
+        : (isDark ? AppTheme.darkSurface : AppTheme.lightSurface);
+    final borderColor = isSepia
+        ? AppTheme.sepiaBorder
+        : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        color: surfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -38,7 +45,7 @@ class _ReaderSettingsPanelState extends State<ReaderSettingsPanel> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                  color: borderColor,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -113,10 +120,10 @@ class _ReaderSettingsPanelState extends State<ReaderSettingsPanel> {
                 isDark ? Icons.light_mode : Icons.dark_mode,
                 color: AppTheme.accent,
               ),
-              title: Text(isDark ? 'Dark Mode' : 'Light Mode'),
+              title: Text(isDark ? 'Dark Mode' : isSepia ? 'Sepia Mode' : 'Light Mode'),
               trailing: Switch(
                 value: isDark,
-                activeColor: AppTheme.accent,
+                activeThumbColor: AppTheme.accent,
                 onChanged: (_) => themeProv.toggleTheme(),
               ),
             ),

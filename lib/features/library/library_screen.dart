@@ -36,53 +36,101 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return Consumer<LibraryProvider>(
       builder: (context, provider, _) {
         return Scaffold(
-          appBar: AppBar(
-            title: provider.selectionMode
-                ? Text('${provider.selectedIds.length} selected')
-                : const Text('Library'),
-            leading: provider.selectionMode
-                ? IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => provider.clearSelection(),
-                  )
-                : null,
-            actions: provider.selectionMode
-                ? [
-                    IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Remove books?'),
-                            content: Text(
-                                'Delete ${provider.selectedIds.length} book(s) and all their chapters?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
+          body: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Custom header — no AppBar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: provider.selectionMode
+                            ? Text(
+                                '${provider.selectedIds.length} selected',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              )
+                            : Text(
+                                'Library',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirmed == true) {
-                          await provider.deleteSelected();
-                        }
-                      },
-                    ),
-                  ]
-                : null,
+                      ),
+                      if (provider.selectionMode) ...[
+                        _iconButton(
+                          icon: Icons.close,
+                          onTap: () => provider.clearSelection(),
+                        ),
+                        const SizedBox(width: 4),
+                        _iconButton(
+                          icon: Icons.delete,
+                          onTap: () => _confirmDelete(context, provider),
+                        ),
+                      ] else ...[
+                        _iconButton(
+                          icon: provider.isGridView ? Icons.view_list : Icons.grid_view,
+                          onTap: () => provider.toggleLayout(),
+                        ),
+                        const SizedBox(width: 4),
+                        _iconButton(
+                          icon: Icons.add,
+                          onTap: () => _showImportOptions(context),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Content
+                Expanded(child: _buildBody(context, provider)),
+              ],
+            ),
           ),
-          body: _buildBody(context, provider),
           floatingActionButton: provider.selectionMode ? null : _buildFAB(context),
         );
       },
     );
+  }
+
+  Widget _iconButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 22),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, LibraryProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove books?'),
+        content: Text(
+            'Delete ${provider.selectedIds.length} book(s) and all their chapters?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await provider.deleteSelected();
+    }
   }
 
   Widget _buildBody(BuildContext context, LibraryProvider provider) {
@@ -96,7 +144,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: AppTheme.accent),
+              Icon(Icons.error_outline, size: 48, color: AppTheme.accent.withValues(alpha: 0.6)),
               const SizedBox(height: 16),
               Text('Something went wrong', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
@@ -115,56 +163,38 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (provider.books.isEmpty) {
       return _buildEmptyState(context);
     }
-    return RefreshIndicator(
-      onRefresh: () => provider.loadBooks(),
-      child: ListView.builder(
-        padding: const EdgeInsets.only(top: 8, bottom: 80),
-        itemCount: provider.books.length,
-        itemBuilder: (context, index) {
-          final book = provider.books[index];
-          final selected = provider.selectedIds.contains(book.id);
-          return BookCard(
-            book: book,
-            selected: selected,
-            selectionMode: provider.selectionMode,
-            onTap: () {
-              if (provider.selectionMode) {
-                provider.toggleSelection(book.id);
-              } else {
-                _openReader(context, book.id);
-              }
-            },
-            onLongPress: () {
-              provider.toggleSelection(book.id);
-            },
-          );
-        },
-      ),
-    );
+    return provider.isGridView
+        ? _buildGridView(context, provider)
+        : _buildListView(context, provider);
   }
 
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.all(48),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.menu_book_rounded, size: 64, color: AppTheme.accent.withValues(alpha: 0.5)),
-            const SizedBox(height: 16),
+            Icon(
+              Icons.auto_stories_rounded,
+              size: 56,
+              color: AppTheme.accent.withValues(alpha: 0.35),
+            ),
+            const SizedBox(height: 20),
             Text(
               'Your library is empty',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
               'Import an EPUB file, add web content, or create a note to get started.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppTheme.lightTextSecondary,
+                    height: 1.5,
                   ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             FilledButton.icon(
               onPressed: () => _showImportOptions(context),
               icon: const Icon(Icons.add),
@@ -177,8 +207,208 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  Widget _buildGridView(BuildContext context, LibraryProvider provider) {
+    final continueBooks = provider.books.where((b) => b.progress > 0 && b.progress < 1.0).toList();
+    return RefreshIndicator(
+      onRefresh: () => provider.loadBooks(),
+      child: CustomScrollView(
+        slivers: [
+          if (continueBooks.isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildContinueReading(context, continueBooks, provider),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                mainAxisExtent: 340,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final book = provider.books[index];
+                  final selected = provider.selectedIds.contains(book.id);
+                  return BookCard(
+                    book: book,
+                    variant: BookCardVariant.grid,
+                    selected: selected,
+                    selectionMode: provider.selectionMode,
+                    onTap: () {
+                      if (provider.selectionMode) {
+                        provider.toggleSelection(book.id);
+                      } else {
+                        _openReader(context, book.id);
+                      }
+                    },
+                    onLongPress: () => provider.toggleSelection(book.id),
+                  );
+                },
+                childCount: provider.books.length,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListView(BuildContext context, LibraryProvider provider) {
+    final continueBooks = provider.books.where((b) => b.progress > 0 && b.progress < 1.0).toList();
+    return RefreshIndicator(
+      onRefresh: () => provider.loadBooks(),
+      child: CustomScrollView(
+        slivers: [
+          if (continueBooks.isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildContinueReading(context, continueBooks, provider),
+            ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final book = provider.books[index];
+                final selected = provider.selectedIds.contains(book.id);
+                return BookCard(
+                  book: book,
+                  selected: selected,
+                  selectionMode: provider.selectionMode,
+                  variant: BookCardVariant.list,
+                  onTap: () {
+                    if (provider.selectionMode) {
+                      provider.toggleSelection(book.id);
+                    } else {
+                      _openReader(context, book.id);
+                    }
+                  },
+                  onLongPress: () {
+                    provider.toggleSelection(book.id);
+                  },
+                );
+              },
+              childCount: provider.books.length,
+            ),
+          ),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContinueReading(BuildContext context, List<Book> books, LibraryProvider provider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+          child: Text(
+            'Continue Reading',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.accent,
+                ),
+          ),
+        ),
+        SizedBox(
+          height: 124,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: books.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final book = books[index];
+              return _buildContinueCard(context, book);
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildContinueCard(BuildContext context, Book book) {
+    return GestureDetector(
+      onTap: () => _openReader(context, book.id),
+      child: SizedBox(
+        width: 110,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Cover — no card wrapper
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 80,
+                width: double.infinity,
+                child: book.coverPath != null && book.coverPath!.isNotEmpty
+                    ? Image.file(
+                        File(book.coverPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _continuePlaceholder(book),
+                      )
+                    : _continuePlaceholder(book),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    book.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: book.progress.clamp(0.0, 1.0),
+                      minHeight: 3,
+                      backgroundColor: Theme.of(context).brightness == Brightness.dark
+                          ? AppTheme.darkBorder
+                          : AppTheme.lightBorder,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _continuePlaceholder(Book book) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.1),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            book.source == 'web' ? Icons.language : Icons.auto_stories,
+            color: AppTheme.accent.withValues(alpha: 0.6),
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFAB(BuildContext context) {
     return FloatingActionButton(
+      heroTag: 'library_fab',
       onPressed: () => _showImportOptions(context),
       child: const Icon(Icons.add),
     );
@@ -187,9 +417,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void _showImportOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -199,28 +426,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
             children: [
               Text('Add to Library', style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.file_present, color: AppTheme.accent),
-                title: const Text('Import File'),
-                subtitle: const Text('EPUB, TXT, or Markdown'),
+              _importOption(
+                icon: Icons.file_present,
+                title: 'Import File',
+                subtitle: 'EPUB, TXT, or Markdown',
                 onTap: () {
                   Navigator.pop(ctx);
                   _importFile(context);
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.language, color: AppTheme.accent),
-                title: const Text('Add URL'),
-                subtitle: const Text('Import web content'),
+              _importOption(
+                icon: Icons.language,
+                title: 'Add URL',
+                subtitle: 'Import web content',
                 onTap: () {
                   Navigator.pop(ctx);
                   _showAddUrlDialog(context);
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.edit_note, color: AppTheme.accent),
-                title: const Text('Add Note'),
-                subtitle: const Text('Create a manual snippet'),
+              _importOption(
+                icon: Icons.edit_note,
+                title: 'Add Note',
+                subtitle: 'Create a manual snippet',
                 onTap: () {
                   Navigator.pop(ctx);
                   _showAddNoteDialog(context);
@@ -228,6 +455,36 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _importOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, color: AppTheme.accent, size: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -249,7 +506,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (ext == '.epub') {
         await _importEpub(context, filePath);
       } else {
-        // TXT/MD: read content directly
         final provider = context.read<LibraryProvider>();
         final content = await File(filePath).readAsString();
         final title = p.basenameWithoutExtension(filePath);
@@ -261,7 +517,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
           totalChapters: 1,
         );
         final bookId = await provider.addBook(book);
-        // Create a single chapter from file content
         final db = context.read<DatabaseService>();
         await db.insertChapter(
           Chapter(
@@ -371,7 +626,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final result = await scraper.fetchContent(url);
       final db = context.read<DatabaseService>();
 
-      // Check cache first
       final cache = CacheService(db.db);
       final cached = await cache.getCached(url);
       if (cached != null) {
@@ -418,7 +672,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
       );
 
-      // Cache content
       await cache.cacheContent(url, result.title, result.contentHtml);
 
       if (context.mounted) {

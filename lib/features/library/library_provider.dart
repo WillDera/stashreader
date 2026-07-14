@@ -9,8 +9,16 @@ class LibraryProvider extends ChangeNotifier {
   String? _error;
   final Set<int> _selectedIds = {};
   bool _selectionMode = false;
+  bool _isGridView = false;
 
   LibraryProvider(this._db);
+
+  bool get isGridView => _isGridView;
+
+  void toggleLayout() {
+    _isGridView = !_isGridView;
+    notifyListeners();
+  }
 
   List<Book> get books => _books;
   bool get loading => _loading;
