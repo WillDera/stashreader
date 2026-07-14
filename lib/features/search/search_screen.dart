@@ -12,6 +12,7 @@ import '../../widgets/animated_press.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_header.dart';
 import '../../widgets/loading_skeleton.dart';
+import '../../widgets/one_hand_spacer.dart';
 import '../../widgets/search_result_row.dart';
 import '../../widgets/text_field.dart';
 import '../../widgets/toast.dart';
@@ -103,10 +104,11 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       bottom: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ListView(
+        padding: EdgeInsets.zero,
         children: [
-          LibraryHeader(
+          const OneHandSpacer(),
+          const LibraryHeader(
             title: 'Search',
             titleSize: 32,
             subtitle: 'Across your library, chapters, and snippets',
@@ -122,7 +124,7 @@ class _SearchScreenState extends State<SearchScreen> {
               onChanged: _search,
             ),
           ),
-          Expanded(child: _buildBody(context)),
+          _buildBody(context),
         ],
       ),
     );
@@ -130,14 +132,20 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_searching) {
-      return ListView.separated(
+      return ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        itemCount: 5,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (_, _) => const Skeleton(
-          height: 64,
-          borderRadius: BorderRadius.all(Radius.circular(18)),
-        ),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          for (var i = 0; i < 5; i++)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Skeleton(
+                height: 64,
+                borderRadius: BorderRadius.all(Radius.circular(18)),
+              ),
+            ),
+        ],
       );
     }
     if (_query.isEmpty) return _buildIdle(context);
@@ -237,8 +245,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final chapters = _results.where((r) => r.type == 'chapter').toList();
     final snippets = _results.where((r) => r.type == 'snippet').toList();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (books.isNotEmpty) ...[
           _sectionHeader('Books', books.length),

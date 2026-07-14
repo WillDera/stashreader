@@ -11,6 +11,7 @@ import '../../widgets/animated_press.dart';
 import '../../widgets/dialog_sheet.dart';
 import '../../widgets/divider_hairline.dart';
 import '../../widgets/library_header.dart';
+import '../../widgets/one_hand_spacer.dart';
 import '../../widgets/segmented_control.dart';
 import '../../widgets/settings_section.dart';
 import '../../widgets/toast.dart';
@@ -26,6 +27,7 @@ class SettingsScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 100),
         children: [
+          const OneHandSpacer(),
           const LibraryHeader(
             title: 'Settings',
             titleSize: 32,
@@ -179,7 +181,54 @@ class _AppearanceSection extends StatelessWidget {
             ],
           ),
         ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: HairlineDivider(),
+        ),
+        const _OneHandToggle(),
       ],
+    );
+  }
+}
+
+// ─── One-hand mode ──────────────────────────────────────────────────────
+class _OneHandToggle extends StatelessWidget {
+  const _OneHandToggle();
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProv = context.watch<ThemeProvider>();
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'One-hand mode',
+            style: TextStyle(
+              color: c.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pushes content toward the bottom half of the screen for easier thumb reach. Headers become minimal.',
+            style: TextStyle(
+              color: c.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Enable one-hand layout'),
+            value: themeProv.oneHandMode,
+            onChanged: themeProv.setOneHandMode,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/icon_button_round.dart';
 import '../../widgets/library_header.dart';
 import '../../widgets/loading_skeleton.dart';
+import '../../widgets/one_hand_spacer.dart';
 import '../../widgets/snippet_card.dart';
 import '../../widgets/snippet_detail_sheet.dart';
 import '../../widgets/tag_filter_bar.dart';
@@ -36,53 +37,10 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
       children: [
         SafeArea(
           bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Consumer<SnippetsProvider>(
-                builder: (context, p, _) => const LibraryHeader(
-                  title: 'Snippets',
-                  titleSize: 32,
-                ),
-              ),
-              Expanded(
-                child: Consumer<SnippetsProvider>(
-                  builder: (context, p, _) {
-                    if (p.loading && p.snippets.isEmpty) {
-                      return _buildLoading();
-                    }
-                    if (p.error != null) {
-                      return EmptyState(
-                        icon: Icons.error_outline,
-                        title: 'Could not load snippets',
-                        subtitle: p.error!,
-                        primaryActionLabel: 'Try again',
-                        onPrimaryAction: () => p.loadSnippets(),
-                      );
-                    }
-                    final items = p.snippets;
-                    return Column(
-                      children: [
-                        if (p.allTags.isNotEmpty)
-                          TagFilterBar(
-                            tags: p.allTags,
-                            selected: p.filterTag,
-                            onChanged: p.setFilterTag,
-                          ),
-                        Expanded(
-                          child: items.isEmpty
-                              ? _buildEmpty(p.filterTag != null)
-                              : _buildList(context, items, p),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
+          child: Consumer<SnippetsProvider>(
+            builder: (context, p, _) => _body(context, p),
           ),
         ),
-        // Floating add button — position respects handMode.
         Positioned(
           left: leftHanded ? 20 : null,
           right: leftHanded ? null : 20,
@@ -100,45 +58,95 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
     );
   }
 
-  Widget _buildLoading() {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-      itemCount: 4,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (_, __) => const Skeleton(
-        height: 180,
-        borderRadius: BorderRadius.all(Radius.circular(18)),
-      ),
-    );
-  }
-
-  Widget _buildEmpty(bool filtered) {
-    return EmptyState(
-      icon: Icons.format_quote_outlined,
-      title: filtered ? 'No matching snippets' : 'No snippets yet',
-      subtitle: filtered
-          ? 'Try a different tag or remove the filter.'
-          : 'Highlight text while reading, or tap + to create one.',
-      primaryActionLabel: filtered ? null : 'New snippet',
-      primaryActionIcon: Icons.add,
-      onPrimaryAction: filtered ? null : () => _createSnippet(context),
-    );
-  }
-
-  Widget _buildList(
-      BuildContext context, List<Snippet> items, SnippetsProvider p) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+  Widget _body(BuildContext context, SnippetsProvider p) {
+    // Single scrollable surface — spacer, header, tag bar, and list all
+    // scroll together, matching the Settings layout.
+    if (p.loading && p.snippets.isEmpty) return _loading();
+    if (p.error != null) {
+      return Column(
+        children: [
+          const LibraryHeader(title: 'Snippets', titleSize: 32),
+          Expanded(
+            child: EmptyState(
+              icon: Icons.error_outline,
+              title: 'Could not load snippets',
+              subtitle: p.error!,
+              primaryActionLabel: 'Try again',
+              onPrimaryAction: () => p.loadSnippets(),
+            ),
+          ),
+        ],
+      );
+    }
+    final items = p.snippets;
+    if (items.isEmpty && p.filterTag == null) {
+      return Column(
+        children: [
+          const LibraryHeader(title: 'Snippets', titleSize: 32),
+          Expanded(
+            child: EmptyState(
+              icon: Icons.format_quote_outlined,
+              title: 'No snippets yet',
+              subtitle:
+                  'Highlight text while reading, or tap + to create one.',
+              primaryActionLabel: 'New snippet',
+              primaryActionIcon: Icons.add,
+              onPrimaryAction: () => _createSnippet(context),
+            ),
+          ),
+        ],
+      );
+    }
+    return ListView(
+      padding: EdgeInsets.zero,
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (ctx, i) {
-        final snippet = items[i];
-        return SnippetCard(
-          snippet: snippet,
-          onTap: () => _editSnippet(context, snippet, p),
-        );
-      },
+      children: [
+        const OneHandSpacer(),
+        const LibraryHeader(title: 'Snippets', titleSize: 32),
+        if (p.allTags.isNotEmpty)
+          TagFilterBar(
+            tags: p.allTags,
+            selected: p.filterTag,
+            onChanged: p.setFilterTag,
+          ),
+        if (items.isEmpty)
+          SizedBox(
+            height: 200,
+            child: EmptyState(
+              icon: Icons.format_quote_outlined,
+              title: 'No matching snippets',
+              subtitle: 'Try a different tag or remove the filter.',
+            ),
+          )
+        else
+          ...items.map(
+            (s) => Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: SnippetCard(
+                snippet: s,
+                onTap: () => _editSnippet(context, s, p),
+              ),
+            ),
+          ),
+        const SizedBox(height: 100),
+      ],
+    );
+  }
+
+  Widget _loading() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      children: [
+        const OneHandSpacer(),
+        for (var i = 0; i < 4; i++)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Skeleton(
+              height: 180,
+              borderRadius: BorderRadius.all(Radius.circular(18)),
+            ),
+          ),
+      ],
     );
   }
 
@@ -157,47 +165,32 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
               );
           if (context.mounted) {
             StashToast.show(
-              context,
-              message: 'Snippet saved',
-              icon: Icons.check,
-            );
+                context, message: 'Snippet saved', icon: Icons.check);
           }
         } catch (e) {
           if (context.mounted) {
             StashToast.show(
-              context,
-              message: 'Failed: $e',
-              icon: Icons.error_outline,
-            );
+                context, message: 'Failed: $e', icon: Icons.error_outline);
           }
         }
       },
     );
   }
 
-  void _editSnippet(
-      BuildContext context, Snippet snippet, SnippetsProvider p) {
+  void _editSnippet(BuildContext context, Snippet snippet, SnippetsProvider p) {
     SnippetDetailSheet.show(
       context,
       snippet: snippet,
       onSave: (s) async {
         await p.updateSnippet(s);
         if (context.mounted) {
-          StashToast.show(
-            context,
-            message: 'Snippet updated',
-            icon: Icons.check,
-          );
+          StashToast.show(context, message: 'Snippet updated', icon: Icons.check);
         }
       },
       onDelete: (id) async {
         await p.deleteSnippet(id);
         if (context.mounted) {
-          StashToast.show(
-            context,
-            message: 'Snippet deleted',
-            icon: Icons.check,
-          );
+          StashToast.show(context, message: 'Snippet deleted', icon: Icons.check);
         }
       },
     );

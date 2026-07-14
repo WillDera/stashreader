@@ -18,6 +18,7 @@ class ThemeProvider extends ChangeNotifier {
   static const _keyTextAlign = 'text_align';
   static const _keyHyphenation = 'hyphenation';
   static const _keyReducedMotion = 'reduced_motion';
+  static const _keyOneHandMode = 'one_hand_mode';
   static const _keyDefaultHighlight = 'default_highlight';
   static const _keyHandMode = 'hand_mode';
 
@@ -35,6 +36,7 @@ class ThemeProvider extends ChangeNotifier {
   bool _reducedMotion = false;
   String _defaultHighlight = 'yellow';
   HandMode _handMode = HandMode.right;
+  bool _oneHandMode = false;
 
   ThemeMode get themeMode => _themeMode;
   bool get sepiaMode => _sepiaMode;
@@ -50,6 +52,7 @@ class ThemeProvider extends ChangeNotifier {
   bool get reducedMotion => _reducedMotion;
   String get defaultHighlight => _defaultHighlight;
   HandMode get handMode => _handMode;
+  bool get oneHandMode => _oneHandMode;
 
   Color get accentColor {
     if (_sepiaMode) return AppColors.sepiaAccent;
@@ -118,6 +121,7 @@ class ThemeProvider extends ChangeNotifier {
     _reducedMotion = prefs.getBool(_keyReducedMotion) ?? false;
     _defaultHighlight = prefs.getString(_keyDefaultHighlight) ?? 'yellow';
     _handMode = HandMode.values[prefs.getInt(_keyHandMode) ?? 1];
+    _oneHandMode = prefs.getBool(_keyOneHandMode) ?? false;
     notifyListeners();
   }
 
@@ -219,6 +223,13 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyHandMode, mode.index);
+  }
+
+  Future<void> setOneHandMode(bool value) async {
+    _oneHandMode = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyOneHandMode, value);
   }
 
   void toggleTheme() {
