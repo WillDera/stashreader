@@ -35,16 +35,12 @@ class SnippetCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: (snippet.color != null
-                          ? Color(int.parse(snippet.color!.replaceFirst('#', '0xFF')))
-                          : AppTheme.accent)
-                      .withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: (snippet.color != null
-                            ? Color(int.parse(snippet.color!.replaceFirst('#', '0xFF')))
-                            : AppTheme.accent)
-                        .withValues(alpha: 0.2),
+              color: _parseColor(snippet.color)
+                  .withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _parseColor(snippet.color)
+                    .withValues(alpha: 0.2),
                   ),
                 ),
                 child: Text(
@@ -134,5 +130,14 @@ class SnippetCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static Color _parseColor(String? color) {
+    if (color == null || color.isEmpty) return AppTheme.accent;
+    try {
+      return Color(int.parse(color.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      return AppTheme.accent;
+    }
   }
 }

@@ -88,7 +88,7 @@ class ReaderProvider extends ChangeNotifier {
       progress: progress,
       currentChapterIndex: _currentIndex,
     );
-    _db.updateProgress(_book!.id, progress);
+    _db.updateProgress(_book!.id, progress, currentChapterIndex: _currentIndex);
   }
 
   void _startReadingTimer() {

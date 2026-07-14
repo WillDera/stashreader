@@ -22,8 +22,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ReaderProvider>().loadBook(widget.bookId);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<ReaderProvider>().loadBook(widget.bookId);
+      // Restore scroll position after the chapter renders
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final pos = context.read<ReaderProvider>().scrollPosition;
+        if (pos > 0 && _scrollController.hasClients) {
+          _scrollController.jumpTo(pos.clamp(0, _scrollController.position.maxScrollExtent));
+        }
+      });
     });
   }
 

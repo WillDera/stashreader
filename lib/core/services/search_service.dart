@@ -135,13 +135,15 @@ class SearchService {
   }
 
   Chapter _chapterFromRow(Map<String, dynamic> row) {
+    final readAtRaw = row['read_at'];
+    final readAt = readAtRaw is String ? DateTime.tryParse(readAtRaw) : readAtRaw as DateTime?;
     return Chapter(
       id: row['id'] as int,
       bookId: row['book_id'] as int,
       title: row['title'] as String,
       content: row['content'] as String,
       index: row['index'] as int,
-      readAt: row['read_at'] as DateTime?,
+      readAt: readAt,
     );
   }
 

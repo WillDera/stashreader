@@ -33,92 +33,113 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Library'),
-      ),
-      body: Consumer<LibraryProvider>(
-        builder: (context, provider, _) {
-          if (provider.loading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (provider.error != null) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48, color: AppTheme.accent),
-                    const SizedBox(height: 16),
-                    Text('Something went wrong', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    Text(provider.error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: () => provider.loadBooks(),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
+    return Consumer<LibraryProvider>(
+      builder: (context, provider, _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: provider.selectionMode
+                ? Text('${provider.selectedIds.length} selected')
+                : const Text('Library'),
+            leading: provider.selectionMode
+                ? IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => provider.clearSelection(),
+                  )
+                : null,
+            actions: provider.selectionMode
+                ? [
+                    IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Remove books?'),
+                            content: Text(
+                                'Delete ${provider.selectedIds.length} book(s) and all their chapters?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await provider.deleteSelected();
+                        }
+                      },
                     ),
-                  ],
-                ),
+                  ]
+                : null,
+          ),
+          body: _buildBody(context, provider),
+          floatingActionButton: provider.selectionMode ? null : _buildFAB(context),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context, LibraryProvider provider) {
+    if (provider.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (provider.error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: AppTheme.accent),
+              const SizedBox(height: 16),
+              Text('Something went wrong', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(provider.error!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => provider.loadBooks(),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
               ),
-            );
-          }
-          if (provider.books.isEmpty) {
-            return _buildEmptyState(context);
-          }
-          return RefreshIndicator(
-            onRefresh: () => provider.loadBooks(),
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 80),
-              itemCount: provider.books.length,
-              itemBuilder: (context, index) {
-                final book = provider.books[index];
-                return Dismissible(
-                  key: ValueKey(book.id),
-                  direction: DismissDirection.endToStart,
-                  confirmDismiss: (_) async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Remove book?'),
-                        content: Text('Delete "${book.title}" and all its chapters?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            style: TextButton.styleFrom(foregroundColor: Colors.red),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed == true) {
-                      context.read<LibraryProvider>().deleteBook(book.id);
-                    }
-                    return false; // always return false — we handle removal via provider
-                  },
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    color: Colors.red,
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  child: BookCard(
-                    book: book,
-                    onTap: () => _openReader(context, book.id),
-                  ),
-                );
-              },
-            ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (provider.books.isEmpty) {
+      return _buildEmptyState(context);
+    }
+    return RefreshIndicator(
+      onRefresh: () => provider.loadBooks(),
+      child: ListView.builder(
+        padding: const EdgeInsets.only(top: 8, bottom: 80),
+        itemCount: provider.books.length,
+        itemBuilder: (context, index) {
+          final book = provider.books[index];
+          final selected = provider.selectedIds.contains(book.id);
+          return BookCard(
+            book: book,
+            selected: selected,
+            selectionMode: provider.selectionMode,
+            onTap: () {
+              if (provider.selectionMode) {
+                provider.toggleSelection(book.id);
+              } else {
+                _openReader(context, book.id);
+              }
+            },
+            onLongPress: () {
+              provider.toggleSelection(book.id);
+            },
           );
         },
       ),
-      floatingActionButton: _buildFAB(context),
     );
   }
 

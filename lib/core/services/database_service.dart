@@ -87,11 +87,12 @@ class DatabaseService {
     );
   }
 
-  Future<void> updateProgress(int bookId, double progress) async {
+  Future<void> updateProgress(int bookId, double progress, {int? currentChapterIndex}) async {
     await _db.customUpdate(
-      'UPDATE books SET progress=?, updated_at=? WHERE id=?',
+      'UPDATE books SET progress=?, current_chapter_index=?, updated_at=? WHERE id=?',
       variables: [
         Variable.withReal(progress),
+        Variable.withInt(currentChapterIndex ?? 0),
         Variable.withDateTime(DateTime.now()),
         Variable.withInt(bookId),
       ],

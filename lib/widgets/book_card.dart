@@ -6,12 +6,18 @@ import '../theme/app_theme.dart';
 class BookCard extends StatelessWidget {
   final Book book;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
+  final bool selectionMode;
   final double coverHeight;
 
   const BookCard({
     super.key,
     required this.book,
     required this.onTap,
+    this.onLongPress,
+    this.selected = false,
+    this.selectionMode = false,
     this.coverHeight = 160,
   });
 
@@ -21,13 +27,24 @@ class BookCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: selected ? AppTheme.accent.withValues(alpha: 0.08) : null,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
+              // Selection checkbox
+              if (selectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Icon(
+                    selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                    color: selected ? AppTheme.accent : null,
+                  ),
+                ),
               // Cover
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
